@@ -144,12 +144,14 @@ def dashboard():
     total_expense = db.session.query(func.coalesce(func.sum(Expense.amount_usd), 0)).scalar()
     net_profit = total_profit - total_expense
 
-    daily_sales = dict(
-        db.session.query(
-            func.date(Sale.date),
-            func.sum(Sale.total_usd)
-        ).group_by(func.date(Sale.date))
-    )
+    daily_sales_rows = db.session.query(
+        func.date(Sale.date),
+        func.sum(Sale.total_usd)
+    ).group_by(func.date(Sale.date)).all()
+
+    # str() the key — Postgres returns datetime.date, SQLite returns str.
+    # JSON requires str/int/float/bool/None keys.
+    daily_sales = {str(day): total for day, total in daily_sales_rows}
 
     from collections import defaultdict
     best_sellers_by_date = defaultdict(dict)
@@ -166,7 +168,7 @@ def dashboard():
         .all()
     )
     for row in shoe_sales:
-        best_sellers_by_date[row.sale_date][row.name] = int(row.total_qty)
+        best_sellers_by_date[str(row.sale_date)][row.name] = int(row.total_qty)
 
     # --- Products ---
     product_sales = (
@@ -181,7 +183,7 @@ def dashboard():
         .all()
     )
     for row in product_sales:
-        day = row.sale_date
+        day = str(row.sale_date)
         name = row.name
         # Disambiguate from a same-named shoe sold that day
         if name in best_sellers_by_date[day]:
