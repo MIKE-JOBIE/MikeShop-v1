@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Login | Mike Shop</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-page">
+
+    <div class="login-box">
+        <h1 style="margin-bottom: 10px;">MIKE Shop</h1>
+        <p style="margin-bottom: 20px; color: #555;">Please Login</p>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="error">{{ messages[0] }}</div>
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="username" placeholder="Username" required>
+            <br><br>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Login</button>
+        </form>
+
+        <div style="margin-top: 15px; font-size: 0.9em; color: #777;">
+            <!-- Default owner: <strong>admin</strong> / <strong>admin123</strong> -->
+        </div>
+
+        <div style="margin-top: 10px; font-size: 0.8em; color: #aaa;">
+            Powered by Mike Shop Web App
+        </div>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,53 @@
+services:
+  - type: web
+    name: mikeShop-v2
+    runtime: python
+    plan: starter
+    autoDeploy: true
+    buildCommand: |
+      pip install -r requirements.txt
+      flask db upgrade
+    startCommand: |
+      gunicorn app:app --worker-class eventlet -w 4 --timeout 120
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mikeShop-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CSRF_SECRET_KEY
+        generateValue: true
+      - key: OWNER_PASSWORD
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_DEFAULT_SENDER
+        sync: false
+      - key: API_KEY
+        generateValue: true
+      - key: REDIS_URL
+        fromService:
+          name: mikeShop-redis
+          type: redis
+          property: connectionString
+      - key: ONLINE_STORE_ENABLED
+        value: "True"
+      - key: STORE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        value: "*"
+    healthCheckPath: /healthz
+
+databases:
+  - name: mikeShop-db
+    plan: starter
+    databaseName: mikeShop
+
+redis:
+  - name: mikeShop-redis
+    plan: starter

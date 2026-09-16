@@ -1,0 +1,28 @@
+# --- Framework ---
+Flask==2.3.2
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.1.0
+Flask-WTF==1.2.2
+Flask-Limiter==3.9.2
+Flask-Login==0.6.3
+
+# --- Real-time ---
+Flask-SocketIO==5.6.0
+python-socketio==5.16.1
+python-engineio==4.13.1
+eventlet==0.40.4
+
+# --- Database ---
+SQLAlchemy==2.0.46
+alembic==1.18.4
+psycopg2-binary==2.9.10
+
+# --- Production ---
+gunicorn==23.0.0
+redis==5.0.1
+
+# --- Utilities ---
+python-dotenv==1.0.1
+Werkzeug==3.1.5
+Jinja2==3.1.6
+reportlab==4.2.5

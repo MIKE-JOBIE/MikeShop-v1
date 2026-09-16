@@ -1,0 +1,125 @@
+{% extends "layouts/admin_layout.html" %}
+
+{% block title %}{{ title }} | MikeShop{% endblock %}
+
+{% block content %}
+<section class="inventory-advanced" style="border-left-color: var(--purple);">
+    <div class="section-header">
+        <div>
+            <span class="section-eyebrow">CRM</span>
+            <h2>Customer Management</h2>
+            <p>Track and manage your customers</p>
+        </div>
+        <div>
+            <span class="inventory-count">
+                <i class="fa-solid fa-users"></i> {{ customers.total }} Customers
+            </span>
+        </div>
+    </div>
+
+    <!-- Search & Add -->
+    <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+        <form method="GET" style="flex: 1; display: flex; gap: 8px;">
+            <div class="table-search" style="flex: 1;">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" name="search" placeholder="Search customers..." value="{{ search or '' }}">
+            </div>
+            <button type="submit" class="primary-btn">
+                <i class="fa-solid fa-search"></i> Search
+            </button>
+            {% if search %}
+                <a href="{{ url_for('customers') }}" class="secondary-btn">Clear</a>
+            {% endif %}
+        </form>
+        
+        {% if role in ['owner', 'admin'] %}
+            <button class="primary-btn" onclick="document.getElementById('addCustomerForm').style.display='block'">
+                <i class="fa-solid fa-user-plus"></i> Add Customer
+            </button>
+        {% endif %}
+    </div>
+
+    <!-- Add Customer Form -->
+    <div id="addCustomerForm" style="display: none; background: var(--grey-light); padding: 20px; border-radius: var(--radius); margin-bottom: 20px;">
+        <h3>Add New Customer</h3>
+        <form method="POST" action="{{ url_for('add_customer') }}">
+            <div class="form-grid">
+                <div class="form-field">
+                    <label>Full Name *</label>
+                    <input type="text" name="name" required placeholder="John Doe">
+                </div>
+                <div class="form-field">
+                    <label>Email</label>
+                    <input type="email" name="email" placeholder="john@example.com">
+                </div>
+                <div class="form-field">
+                    <label>Phone</label>
+                    <input type="text" name="phone" placeholder="+232 76 123 456">
+                </div>
+                <div class="form-field">
+                    <label>Address</label>
+                    <input type="text" name="address" placeholder="Street address">
+                </div>
+                <div class="form-field">
+                    <label>City</label>
+                    <input type="text" name="city" placeholder="Freetown">
+                </div>
+                <div class="form-field">
+                    <label>Country</label>
+                    <input type="text" name="country" value="Sierra Leone">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="secondary-btn" onclick="document.getElementById('addCustomerForm').style.display='none'">Cancel</button>
+                <button type="submit" class="primary-btn"><i class="fa-solid fa-save"></i> Save Customer</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Customer Grid -->
+    <div class="customer-grid">
+        {% for customer in customers.items %}
+        <a href="{{ url_for('customer_detail', customer_id=customer.id) }}" style="text-decoration: none;">
+            <div class="customer-card">
+                <div class="avatar">{{ customer.name[0]|upper }}</div>
+                <div class="name">{{ customer.name }}</div>
+                <div class="email">
+                    <i class="fa-regular fa-envelope"></i> {{ customer.email or 'No email' }}
+                </div>
+                <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
+                    <span class="tier-badge tier-{{ customer.get_loyalty_tier()|lower }}">
+                        {{ customer.get_loyalty_tier() }}
+                    </span>
+                    <span style="font-size: 11px; color: var(--grey-dark);">
+                        <i class="fa-regular fa-clock"></i> {{ customer.created_at.strftime('%d %b %Y') }}
+                    </span>
+                </div>
+                <div style="margin-top: 6px; font-size: 13px; color: var(--mint-dark);">
+                    💰 ${{ "%.2f"|format(customer.total_spent) }} spent
+                </div>
+                <div style="font-size: 12px; color: var(--grey-dark);">
+                    🛒 {{ customer.total_orders }} orders
+                </div>
+            </div>
+        </a>
+        {% else %}
+        <div class="empty-state" style="grid-column: 1/-1;">
+            <i class="fa-solid fa-users-slash"></i>
+            <strong>No customers yet</strong>
+            <span>Start building your customer base today!</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if customers.pages > 1 %}
+    <div class="pagination">
+        {% for p in range(1, customers.pages + 1) %}
+            <a href="{{ url_for('customers', page=p, search=search) }}" class="{{ 'active' if p == customers.page else '' }}">
+                {{ p }}
+            </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

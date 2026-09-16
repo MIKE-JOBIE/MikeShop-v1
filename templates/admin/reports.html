@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{{ title }} | MikeShop</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .report-filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 20px; }
+        .report-filters label { font-size: 11px; font-weight: 700; color: var(--grey-dark); }
+        .report-filters input, .report-filters select { padding: 8px 12px; border: 1px solid var(--grey); border-radius: 8px; }
+        .report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .kpi-chart { background: var(--white); border: 1px solid var(--grey); border-radius: var(--radius); padding: 16px; }
+        .kpi-chart canvas { max-height: 300px; }
+    </style>
+</head>
+<body>
+
+<div class="layout">
+    <div class="main-content">
+        
+        <header class="app-header">
+            <div class="brand-box">
+                <a href="{{ url_for('dashboard') }}" class="brand-logo-link">
+                    <div class="brand-mark"><i class="fa-solid fa-store"></i></div>
+                    <div class="brand-wordmark">
+                        <strong>Mike</strong><span>Shop</span>
+                        <small>STORE MANAGEMENT</small>
+                    </div>
+                </a>
+            </div>
+            <nav class="top-nav">
+                <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+                <a href="{{ url_for('sales_history') }}"><i class="fa-solid fa-chart-line"></i> Analytics</a>
+                <a href="{{ url_for('reports') }}" class="active v2-feature"><i class="fa-solid fa-file-pdf"></i> Reports</a>
+            </nav>
+            <div class="header-right">
+                <div class="user-info">👤 <span>{{ username }}</span> <span class="user-role">{{ role|capitalize }}</span></div>
+                <a href="{{ url_for('logout') }}" class="logout">Logout</a>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}{% for msg in messages %}<div class="flash">{{ msg }}</div>{% endfor %}{% endif %}
+        {% endwith %}
+
+        <section class="inventory-advanced" style="border-left-color: var(--purple);">
+            <div class="section-header">
+                <div>
+                    <span class="section-eyebrow">ANALYTICS</span>
+                    <h2>Reports & Analytics</h2>
+                    <p>Generate and export business reports</p>
+                </div>
+            </div>
+
+            <!-- Report Filters -->
+            <div class="report-filters">
+                <label>
+                    Period
+                    <select id="reportDays" onchange="loadReportData()">
+                        <option value="7">Last 7 days</option>
+                        <option value="30" selected>Last 30 days</option>
+                        <option value="90">Last 90 days</option>
+                        <option value="365">Last year</option>
+                    </select>
+                </label>
+                <button class="primary-btn" onclick="loadReportData()"><i class="fa-solid fa-refresh"></i> Refresh</button>
+                <button class="secondary-btn" onclick="exportPDF()"><i class="fa-solid fa-file-pdf"></i> Export PDF</button>
+                <button class="secondary-btn" onclick="exportCSV()"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
+            </div>
+
+            <!-- KPI Summary -->
+            <div id="kpiSummary" class="report-grid">
+                <div class="stat-card"><div class="icon icon-mint"><i class="fa-solid fa-sack-dollar"></i></div>
+                    <div><div class="stat-value" id="kpiRevenue">$0</div><div class="stat-label">Revenue</div></div></div>
+                <div class="stat-card"><div class="icon icon-purple"><i class="fa-solid fa-arrow-trend-up"></i></div>
+                    <div><div class="stat-value" id="kpiProfit">$0</div><div class="stat-label">Profit</div></div></div>
+                <div class="stat-card"><div class="icon icon-sky"><i class="fa-solid fa-wallet"></i></div>
+                    <div><div class="stat-value" id="kpiExpenses">$0</div><div class="stat-label">Expenses</div></div></div>
+                <div class="stat-card"><div class="icon icon-mint"><i class="fa-solid fa-chart-simple"></i></div>
+                    <div><div class="stat-value" id="kpiNet">$0</div><div class="stat-label">Net Profit</div></div></div>
+                <div class="stat-card"><div class="icon icon-sky"><i class="fa-solid fa-box"></i></div>
+                    <div><div class="stat-value" id="kpiTransactions">0</div><div class="stat-label">Transactions</div></div></div>
+                <div class="stat-card"><div class="icon icon-purple"><i class="fa-solid fa-cubes"></i></div>
+                    <div><div class="stat-value" id="kpiItems">0</div><div class="stat-label">Items Sold</div></div></div>
+            </div>
+
+            <!-- Charts -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div class="kpi-chart">
+                    <h4>Daily Revenue Trend</h4>
+                    <canvas id="revenueChart"></canvas>
+                </div>
+                <div class="kpi-chart">
+                    <h4>Top Products</h4>
+                    <canvas id="productsChart"></canvas>
+                </div>
+                <div class="kpi-chart" style="grid-column: 1/-1;">
+                    <h4>Staff Performance</h4>
+                    <canvas id="staffChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Inventory Summary -->
+            <div style="margin-top: 20px; background: var(--grey-light); padding: 16px; border-radius: var(--radius);">
+                <h4>📦 Inventory Summary</h4>
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <span><strong>Total Inventory Value:</strong> <span id="inventoryValue">$0</span></span>
+                    <span><strong>Total Products:</strong> <span id="totalProducts">0</span></span>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<script>
+let revenueChart = null, productsChart = null, staffChart = null;
+
+async function loadReportData() {
+    const days = document.getElementById('reportDays').value;
+    
+    try {
+        const response = await fetch(`/api/report/sales_summary?days=${days}`);
+        const data = await response.json();
+        
+        // Update KPIs
+        document.getElementById('kpiRevenue').textContent = `$${data.total_revenue.toFixed(2)}`;
+        document.getElementById('kpiProfit').textContent = `$${data.total_profit.toFixed(2)}`;
+        document.getElementById('kpiExpenses').textContent = `$${data.total_expenses.toFixed(2)}`;
+        document.getElementById('kpiNet').textContent = `$${data.net_profit.toFixed(2)}`;
+        document.getElementById('kpiTransactions').textContent = data.total_transactions;
+        document.getElementById('kpiItems').textContent = data.total_items_sold;
+        document.getElementById('inventoryValue').textContent = `$${data.inventory_value.toFixed(2)}`;
+        document.getElementById('totalProducts').textContent = data.total_products;
+        
+        // Revenue Chart
+        const ctx1 = document.getElementById('revenueChart').getContext('2d');
+        if (revenueChart) revenueChart.destroy();
+        revenueChart = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels: data.daily.map(d => d.date),
+                datasets: [{
+                    label: 'Revenue ($)',
+                    data: data.daily.map(d => d.revenue),
+                    borderColor: '#34D399',
+                    backgroundColor: 'rgba(52, 211, 153, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } } }
+        });
+        
+        // Products Chart
+        const ctx2 = document.getElementById('productsChart').getContext('2d');
+        if (productsChart) productsChart.destroy();
+        productsChart = new Chart(ctx2, {
+            type: 'bar',
+            data: {
+                labels: data.top_products.map(p => p.name),
+                datasets: [{
+                    label: 'Revenue ($)',
+                    data: data.top_products.map(p => p.revenue),
+                    backgroundColor: '#8B5CF6',
+                    borderRadius: 6
+                }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } } }
+        });
+        
+        // Staff Chart
+        const ctx3 = document.getElementById('staffChart').getContext('2d');
+        if (staffChart) staffChart.destroy();
+        staffChart = new Chart(ctx3, {
+            type: 'bar',
+            data: {
+                labels: data.top_staff.map(s => s.name),
+                datasets: [{
+                    label: 'Sales ($)',
+                    data: data.top_staff.map(s => s.revenue),
+                    backgroundColor: '#38BDF8',
+                    borderRadius: 6
+                }]
+            },
+            options: { responsive: true }
+        });
+        
+    } catch (error) {
+        console.error('Report load error:', error);
+    }
+}
+
+function exportPDF() {
+    const days = document.getElementById('reportDays').value;
+    window.location.href = `/export/report/pdf?days=${days}`;
+}
+
+function exportCSV() {
+    const days = document.getElementById('reportDays').value;
+    window.location.href = `/export/report/csv?days=${days}`;
+}
+
+document.addEventListener('DOMContentLoaded', loadReportData);
+</script>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

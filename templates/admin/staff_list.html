@@ -1,0 +1,79 @@
+{% extends "layouts/admin_layout.html" %}
+
+{% block title %}Staff Management | MikeShop{% endblock %}
+
+{% block content %}
+<section class="inventory-advanced" style="border-left-color: var(--purple);">
+    <div class="section-header">
+        <div>
+            <span class="section-eyebrow">TEAM</span>
+            <h2>Staff Management</h2>
+            <p>Manage admin and staff accounts. Use "Add Staff Member" on the Dashboard to create a new account.</p>
+        </div>
+        <div>
+            <span class="inventory-count">
+                <i class="fa-solid fa-user-group"></i> {{ users|length }} Accounts
+            </span>
+        </div>
+    </div>
+
+    <table>
+        <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Last Login</th>
+            <th>Actions</th>
+        </tr>
+        {% for u in users %}
+        <tr>
+            <td>{{ u.username }}</td>
+            <td>
+                <select onchange="updateRole({{ u.id }}, this.value)" style="padding: 4px 8px;">
+                    <option value="admin" {% if u.role.name == 'admin' %}selected{% endif %}>Admin</option>
+                    <option value="staff" {% if u.role.name == 'staff' %}selected{% endif %}>Staff</option>
+                </select>
+            </td>
+            <td>
+                {% if u.is_active %}
+                    <span class="tier-badge tier-gold" style="background: var(--mint-light); color: var(--mint-dark);">Active</span>
+                {% else %}
+                    <span class="tier-badge" style="background: var(--grey-light); color: var(--grey-dark);">Deactivated</span>
+                {% endif %}
+            </td>
+            <td>{{ u.created_at.strftime('%d %b %Y') if u.created_at else '—' }}</td>
+            <td>{{ u.last_login.strftime('%d %b %Y, %H:%M') if u.last_login else 'Never' }}</td>
+            <td style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <button class="secondary-btn" style="padding: 4px 10px; font-size: 12px;"
+                        onclick="toggleStaffActive({{ u.id }})">
+                    {% if u.is_active %}
+                        <i class="fa-solid fa-ban"></i> Deactivate
+                    {% else %}
+                        <i class="fa-solid fa-check"></i> Activate
+                    {% endif %}
+                </button>
+                <button class="secondary-btn" style="padding: 4px 10px; font-size: 12px;"
+                        onclick="resetPassword({{ u.id }})">
+                    <i class="fa-solid fa-key"></i> Reset Password
+                </button>
+                <button class="secondary-btn" style="padding: 4px 10px; font-size: 12px; color: #b91c1c;"
+                        onclick="deleteStaff({{ u.id }})">
+                    <i class="fa-solid fa-trash"></i> Delete
+                </button>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="6">
+                <div class="empty-state">
+                    <i class="fa-solid fa-user-group"></i>
+                    <strong>No staff accounts yet</strong>
+                    <span>Add one from the Dashboard's "Add Staff Member" section.</span>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</section>
+{% endblock %}

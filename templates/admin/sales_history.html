@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Sales History | Mike Shop</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+
+<body class="sales-history-page">
+    
+<div class="layout">
+
+<div class="main-content">
+
+<section class="history">
+
+<div class="page-header">
+
+    <div>
+        <a href="{{ url_for('dashboard') }}" class="back-link">
+            ← Back to Dashboard
+        </a>
+    </div>
+
+    <h2>Sales Analytics</h2>
+    <div class="page-actions">
+        <a href="/export_sales_csv">Export CSV</a>
+        <a href="/export_sales_pdf">Export PDF</a>
+        <a onclick="window.print()">Print</a>
+    </div>
+</div>
+
+<!-- FILTERS -->
+<form method="GET" class="history-filters">
+
+    <label>
+        Staff
+
+        <select name="user">
+            <option value="">All Staff</option>
+
+            {% for u in staff_list %}
+            <option value="{{ u }}"
+                {% if user_filter == u %}selected{% endif %}>
+                {{ u }}
+            </option>
+            {% endfor %}
+        </select>
+
+    </label>
+
+
+    <label>
+        Start Date
+
+        <input
+            type="date"
+            name="start"
+            value="{{ start or '' }}"
+        >
+    </label>
+
+
+    <label>
+        End Date
+
+        <input
+            type="date"
+            name="end"
+            value="{{ end or '' }}"
+        >
+    </label>
+
+
+    <label>
+        Search
+
+        <input
+            type="text"
+            name="search"
+            value="{{ search or '' }}"
+            placeholder="Brand, model or size..."
+        >
+    </label>
+
+
+    <button
+        type="submit"
+        class="primary-btn"
+    >
+        <i class="fa-solid fa-filter"></i>
+        Apply Filters
+    </button>
+
+
+    <div class="quick-buttons">
+
+        <button
+            type="submit"
+            name="quick"
+            value="today"
+        >
+            Today
+        </button>
+
+        <button
+            type="submit"
+            name="quick"
+            value="week"
+        >
+            This Week
+        </button>
+
+        <button
+            type="submit"
+            name="quick"
+            value="month"
+        >
+            This Month
+        </button>
+
+        <button
+            type="submit"
+            name="quick"
+            value="30days"
+        >
+            Last 30 Days
+        </button>
+
+    </div>
+
+
+    {% if user_filter or search or start or end or quick %}
+
+    <a
+        href="{{ url_for('sales_history') }}"
+        class="secondary-btn"
+    >
+        <i class="fa-solid fa-xmark"></i>
+        Clear Filters
+    </a>
+
+    {% endif %}
+
+</form>
+
+<!-- KPI CARDS -->
+<div class="summary">
+
+    <div class="card">
+        <h3>Total Revenue</h3>
+        <p>${{ "%.2f"|format(total_sales) }}</p>
+    </div>
+
+    <div class="card">
+        <h3>Total Profit</h3>
+        <p>${{ "%.2f"|format(total_profit) }}</p>
+    </div>
+
+    <div class="card">
+        <h3>Items Sold</h3>
+        <p>{{ total_items }}</p>
+    </div>
+
+    <div class="card">
+        <h3>Average Sale</h3>
+        <p>${{ "%.2f"|format(avg_sale or 0) }}</p>
+    </div>
+
+    <div class="card">
+        <h3>Top Staff</h3>
+        <p>{{ top_staff }}</p>
+    </div>
+
+    <div class="card">
+        <h3>Top Product</h3>
+        <p>{{ top_product }}</p>
+    </div>
+
+</div>
+
+<div
+    id="salesHistoryData"
+    data-trend-labels='{{ trend_labels|safe }}'
+    data-trend-data='{{ trend_data|safe }}'
+    data-staff-labels='{{ staff_labels|safe }}'
+    data-staff-data='{{ staff_data|safe }}'
+></div>
+<!-- CHARTS -->
+<div class="charts-grid">
+    <div>
+        <canvas id="salesTrendChart"></canvas>
+    </div>
+    <div>
+        <canvas id="staffChart"></canvas>
+    </div>
+</div>
+
+<!-- TABLE -->
+<table>
+<tr>
+    <th>Date</th>
+    <th>Product</th>
+    <th>Qty</th>
+    <th>Total ($)</th>
+    {% if role in ['owner','admin'] %}
+        <th>Profit ($)</th>
+    {% endif %}
+    <th>Sold By</th>
+    <th>Receipt</th>
+</tr>
+
+{% for s in sales %}
+<tr>
+    <td>{{ s.date.strftime('%Y-%m-%d') }}</td>
+    <td>
+        {% if s.shoe %}
+            {{ s.shoe.brand }} {{ s.shoe.model }}
+        {% elif s.product %}
+            {{ s.product.display_name() }}
+            <span style="font-size: 10px; color: var(--grey-dark);">({{ s.product.category }})</span>
+        {% else %}
+            <em style="color: var(--grey-dark);">Deleted item</em>
+        {% endif %}
+    </td>
+    <td>{{ s.quantity }}</td>
+    <td>${{ "%.2f"|format(s.total_usd) }}</td>
+
+    {% if role in ['owner','admin'] %}
+        <td class="{{ 'profit-good' if s.profit_usd > 10 else 'profit-low' }}">
+            ${{ "%.2f"|format(s.profit_usd) }}
+        </td>
+    {% endif %}
+
+    <td>{{ s.sold_by }}</td>
+    <td><a href="/receipt/{{s.id}}">View</a></td>
+</tr>
+{% endfor %}
+</table>
+
+<!-- ==================== PAGINATION ==================== -->
+
+{% if total_pages > 1 %}
+
+<div class="pagination sales-history-pagination">
+    {% if current_page > 1 %}
+
+    <a
+        href="{{ url_for(
+            'sales_history',
+            page=current_page - 1,
+            user=user_filter,
+            search=search,
+            start=start,
+            end=end,
+            quick=quick
+        ) }}"
+    >
+        « Prev
+    </a>
+
+    {% endif %}
+
+
+    {% for p in range(1, total_pages + 1) %}
+
+    <a
+        class="{% if p == current_page %}active{% endif %}"
+        href="{{ url_for(
+            'sales_history',
+            page=p,
+            user=user_filter,
+            search=search,
+            start=start,
+            end=end,
+            quick=quick
+        ) }}"
+    >
+        {{ p }}
+    </a>
+
+    {% endfor %}
+
+
+    {% if current_page < total_pages %}
+
+    <a
+        href="{{ url_for(
+            'sales_history',
+            page=current_page + 1,
+            user=user_filter,
+            search=search,
+            start=start,
+            end=end,
+            quick=quick
+        ) }}"
+    >
+        Next »
+    </a>
+
+    {% endif %}
+
+</div>
+
+{% endif %}
+
+</section>
+
+</div>
+</div>
+
+</body>
+</html>

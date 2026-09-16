@@ -1,0 +1,96 @@
+{% extends "layouts/base.html" %}
+
+{% block body %}
+<div class="layout">
+    <div class="main-content">
+        
+        <!-- Header -->
+        <header class="app-header">
+            <div class="brand-box">
+                <a href="{{ url_for('dashboard') }}" class="brand-logo-link">
+                    <div class="brand-mark">
+                        <i class="fa-solid fa-store"></i>
+                    </div>
+                    <div class="brand-wordmark">
+                        <strong>Mike</strong><span>Shop</span>
+                        <small>ADMIN</small>
+                    </div>
+                </a>
+            </div>
+            
+            <nav class="top-nav">
+                <a href="{{ url_for('dashboard') }}" class="{% if active_page == 'dashboard' %}active{% endif %}">
+                    <i class="fa-solid fa-gauge-high"></i> Dashboard
+                </a>
+                <a href="{{ url_for('sales_history') }}" class="{% if active_page == 'sales' %}active{% endif %}">
+                    <i class="fa-solid fa-chart-line"></i> Analytics
+                </a>
+                <a href="{{ url_for('customers') }}" class="v2-feature {% if active_page == 'customers' %}active{% endif %}">
+                    <i class="fa-solid fa-users"></i> Customers
+                </a>
+                <a href="{{ url_for('reports') }}" class="v2-feature {% if active_page == 'reports' %}active{% endif %}">
+                    <i class="fa-solid fa-file-pdf"></i> Reports
+                </a>
+                                {% if role == 'owner' %}
+                <a href="{{ url_for('staff_list') }}" class="{% if active_page == 'staff' %}active{% endif %}">
+                    <i class="fa-solid fa-user-gear"></i> Staff
+                </a>
+                {% endif %}
+            </nav>
+            
+            <div class="header-right">
+                <div class="user-info">
+                    👤 <span>{{ username }}</span>
+                    <span class="user-role">{{ role|capitalize }}</span>
+                </div>
+                
+                <div class="notification-wrapper">
+                    <button class="alert-btn" onclick="toggleNotifications()">
+                        <i class="fa-solid fa-bell"></i>
+                        {% if unread_alerts > 0 %}
+                        <span class="alert-dot">{{ unread_alerts }}</span>
+                        {% endif %}
+                    </button>
+                    <div id="notificationPanel" class="alert-menu">
+                        <div class="alert-header">
+                            <h4>Notifications</h4>
+                            <button class="mark-all" onclick="markAllRead()">Mark all read</button>
+                        </div>
+                        {% if notifications %}
+                            {% for n in notifications %}
+                            <div class="alert-item {% if not n.is_read %}unread{% endif %}" 
+                                 data-id="{{ n.id }}"
+                                 onclick="markSingleRead(this)">
+                                <div class="alert-message">{{ n.message }}</div>
+                                <div class="alert-time">{{ n.created_at.strftime("%d %b %H:%M") }}</div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="alert-item">No notifications 🎉</div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <a href="{{ url_for('logout') }}" class="logout">Logout</a>
+            </div>
+        </header>
+        
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for msg in messages %}
+                    <div class="flash">{{ msg }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <!-- Main Content -->
+        <main>
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</div>
+
+<!-- Admin JS -->
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endblock %}
