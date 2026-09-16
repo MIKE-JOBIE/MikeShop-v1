@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file, abort
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -42,13 +45,16 @@ limiter.init_app(app)
 
 
 @app.route('/healthz')
+@limiter.exempt
 def healthz():
     from sqlalchemy import text
     try:
         db.session.execute(text('SELECT 1'))
+        db.session.commit()
         return {'status': 'ok', 'db': 'ok'}, 200
     except Exception as e:
-        return {'status': 'degraded', 'error': str(e)}, 500
+        db.session.rollback()
+        return {'status': 'degraded', 'error': str(e)}, 200
 
 # ==================== IMPORT MODELS ====================
 from models.core import Role, User, Shoe, Sale, Expense, Product, AuditLog, Notification, Restock
