@@ -41,8 +41,11 @@ services:
         sync: false
       - key: CORS_ORIGINS
         value: "*"
-    healthCheckPath: /healthz
-
+        healthCheckPath: /healthz
+  - type: keyvalue
+    name: mikeShop-redis
+    plan: starter
+    ipAllowList: []   # only allow internal connections
 databases:
   - name: mikeShop-db
     plan: starter
