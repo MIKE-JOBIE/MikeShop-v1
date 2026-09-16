@@ -51,4 +51,4 @@ services:
 databases:
   - name: mikeShop-db
     plan: starter
-    databaseName: mikeShop
+    databaseName: mikeshop
