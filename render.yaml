@@ -51,6 +51,4 @@ databases:
     plan: starter
     databaseName: mikeShop
 
-redis:
-  - name: mikeShop-redis
-    plan: starter
+
