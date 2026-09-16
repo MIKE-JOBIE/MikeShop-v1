@@ -8,7 +8,7 @@ services:
       pip install -r requirements.txt
       flask db upgrade
     startCommand: |
-      gunicorn app:app --worker-class eventlet -w 4 --timeout 120
+      gunicorn app:app --worker-class eventlet -w 1 --timeout 120
     envVars:
       - key: FLASK_ENV
         value: production
@@ -33,7 +33,7 @@ services:
       - key: REDIS_URL
         fromService:
           name: mikeShop-redis
-          type: redis
+          type: keyvalue
           property: connectionString
       - key: ONLINE_STORE_ENABLED
         value: "True"
@@ -41,14 +41,14 @@ services:
         sync: false
       - key: CORS_ORIGINS
         value: "*"
-        healthCheckPath: /healthz
+    healthCheckPath: /healthz
+
   - type: keyvalue
     name: mikeShop-redis
     plan: starter
-    ipAllowList: []   # only allow internal connections
+    ipAllowList: []
+
 databases:
   - name: mikeShop-db
     plan: starter
     databaseName: mikeShop
-
-
