@@ -1,10 +1,11 @@
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file, abort
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date, datetime, timedelta
 from functools import wraps
 from sqlalchemy import func
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room
 from flask import jsonify
 import csv, io, os
 from flask_migrate import Migrate
@@ -22,6 +23,7 @@ app = Flask(__name__)
 # Load config based on environment
 env = os.environ.get('FLASK_ENV', 'development')
 app.config.from_object(config[env])
+app.config.setdefault('MAX_CONTENT_LENGTH', 2 * 1024 * 1024)
 
 # ---- CSRF protection (Flask-WTF) ----
 from flask_wtf.csrf import CSRFProtect, CSRFError
@@ -35,7 +37,7 @@ db.init_app(app)
 migrate.init_app(app, db)
 socketio.init_app(
     app,
-    cors_allowed_origins=app.config.get('CORS_ORIGINS', '*'),
+    cors_allowed_origins=app.config.get('CORS_ORIGINS') or [],
     message_queue=os.environ.get('REDIS_URL')
 )
 limiter.init_app(app)
@@ -51,7 +53,42 @@ def healthz():
         return {'status': 'ok', 'db': 'ok'}, 200
     except Exception as e:
         db.session.rollback()
-        return {'status': 'degraded', 'error': str(e)}, 200
+        return {'status': 'degraded', 'db': 'error'}, 503
+
+
+    
+   # ==================== CONSTANTS ====================
+
+USD_TO_SLL = app.config.get('USD_TO_SLL', 23000)
+LOW_STOCK_THRESHOLD = 10
+PER_PAGE = 15
+
+OWNER_USERNAME = "MichaelJobieMusa"
+OWNER_PASSWORD = os.environ.get("OWNER_PASSWORD")
+
+# ==================== HELPERS ====================
+# IMPORTANT: usd_to_sll + depreciated_value MUST be defined before the
+# route imports below. routes/reports.py and routes/api.py do
+# `from app import app, csrf, depreciated_value` at import time. If these
+# functions live below the route imports, Python hits a circular import.
+
+def usd_to_sll(value):
+    """Convert USD to Sierra Leonean Leone using the configured rate."""
+    return round((value or 0) * USD_TO_SLL, 2)
+
+def depreciated_value(original_cost_value, deactivated_at):
+    """Straight-line depreciation: an item's cost value declines to $0 over
+    DEPRECIATION_PERIOD_DAYS after it was marked inactive. Returns the
+    original value unchanged if it's still active (deactivated_at is None),
+    and 0 once the depreciation period has fully elapsed."""
+    if not deactivated_at or original_cost_value <= 0:
+        return original_cost_value
+    period_days = app.config.get('DEPRECIATION_PERIOD_DAYS', 365)
+    days_elapsed = (datetime.utcnow() - deactivated_at).total_seconds() / 86400
+    remaining_fraction = max(0.0, 1 - (days_elapsed / period_days))
+    return round(original_cost_value * remaining_fraction, 2)
+
+app.jinja_env.globals.update(usd_to_sll=usd_to_sll)
 
 # ==================== IMPORT MODELS ====================
 from models.core import Role, User, Shoe, Sale, Expense, Product, AuditLog, Notification, Restock
@@ -65,22 +102,7 @@ from routes.customers import *
 from routes.reports import *
 from routes.api import *
 
-# ==================== CONSTANTS ====================
-
-USD_TO_SLL = app.config.get('USD_TO_SLL', 23000)
-LOW_STOCK_THRESHOLD = 10
-PER_PAGE = 15
-
-OWNER_USERNAME = "MichaelJobieMusa"
-OWNER_PASSWORD = os.environ.get("OWNER_PASSWORD")
-
-# ==================== HELPERS ====================
-
-def usd_to_sll(value):
-    """Convert USD to Sierra Leonean Leone using the configured rate."""
-    return round((value or 0) * USD_TO_SLL, 2)
-
-app.jinja_env.globals.update(usd_to_sll=usd_to_sll)
+# ==================== HELPERS (continued) ====================
 
 def log(action, commit=False):
     """Add an audit-log entry."""
@@ -98,6 +120,46 @@ def log(action, commit=False):
         raise
 
 
+
+@app.after_request
+def add_security_headers(response):
+    """Apply baseline browser security headers to every response."""
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.headers.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    # The UI currently contains a small amount of inline CSS/JS and loads
+    # trusted CDN assets, so the CSP intentionally allows those sources.
+    response.headers.setdefault(
+        'Content-Security-Policy',
+        "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; "
+        "object-src 'none'; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.socket.io https://cdnjs.cloudflare.com; "
+        "connect-src 'self' ws: wss:;"
+    )
+    # Authenticated HTML/JSON is user-specific and must not be served from a
+    # stale browser/proxy cache after another action changes the database.
+    # Static assets are intentionally left cacheable.
+    if session.get('user_id') and (
+        response.content_type.startswith('text/html') or
+        response.content_type.startswith('application/json')
+    ):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['Vary'] = 'Cookie'
+
+    if app.config.get('FLASK_ENV') == 'production' and request.is_secure:
+        response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    return response
+
+
+@socketio.on('connect')
+def socket_connect():
+    user_id = session.get('user_id')
+    if user_id:
+        join_room(f'user_{user_id}')
 
 # ==================== CONTEXT PROCESSOR ====================
 
@@ -148,6 +210,8 @@ def seed_owner():
             "OWNER_PASSWORD environment variable is not configured. "
             "The initial owner account cannot be created."
         )
+    if app.config.get('FLASK_ENV') == 'production' and len(OWNER_PASSWORD) < app.config.get('MIN_PASSWORD_LENGTH', 12):
+        raise RuntimeError(f"OWNER_PASSWORD must be at least {app.config.get('MIN_PASSWORD_LENGTH', 12)} characters in production.")
     owner_role = Role.query.filter_by(name="owner").first()
     if not owner_role:
         raise RuntimeError("Owner role does not exist. Run seed_roles() first.")
@@ -211,9 +275,18 @@ with app.app_context():
         app.logger.error(f"Owner/role seeding failed on startup: {e}")
 
 if __name__ == "__main__":
+    # use_reloader=False is deliberate: eventlet.monkey_patch() (top of this
+    # file, required for Socket.IO) conflicts with Werkzeug's auto-reloader,
+    # which restarts the process via a fork/subprocess on every file save.
+    # Under eventlet's patched os/threading/select, that restart can hang
+    # or silently fail to pick up changes. debug=True is kept so you still
+    # get Flask's error pages and tracebacks locally — you'll just need to
+    # manually stop/restart (Ctrl+C, then re-run) after code changes.
+    # Set MIKESHOP_USE_RELOADER=1 if you want to try the reloader anyway.
     socketio.run(
         app,
         debug=env == 'development',
+        use_reloader=os.environ.get('MIKESHOP_USE_RELOADER') == '1',
         host='0.0.0.0',
         port=int(os.environ.get('PORT', 5000))
     )

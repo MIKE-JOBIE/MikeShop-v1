@@ -17,6 +17,10 @@
         </div>
     </div>
 
+    <div class="page-explainer">
+        <strong>What this page is for:</strong> Your customer directory — contact info, loyalty tier, and lifetime spend. Click a customer to see their full purchase history.
+    </div>
+
     <!-- Search & Add -->
     <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
         <form method="GET" style="flex: 1; display: flex; gap: 8px;">
@@ -43,6 +47,7 @@
     <div id="addCustomerForm" style="display: none; background: var(--grey-light); padding: 20px; border-radius: var(--radius); margin-bottom: 20px;">
         <h3>Add New Customer</h3>
         <form method="POST" action="{{ url_for('add_customer') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-grid">
                 <div class="form-field">
                     <label>Full Name *</label>

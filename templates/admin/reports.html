@@ -1,123 +1,115 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ title }} | MikeShop</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        .report-filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 20px; }
-        .report-filters label { font-size: 11px; font-weight: 700; color: var(--grey-dark); }
-        .report-filters input, .report-filters select { padding: 8px 12px; border: 1px solid var(--grey); border-radius: 8px; }
-        .report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .kpi-chart { background: var(--white); border: 1px solid var(--grey); border-radius: var(--radius); padding: 16px; }
-        .kpi-chart canvas { max-height: 300px; }
-    </style>
-</head>
-<body>
+{% extends "layouts/admin_layout.html" %}
 
-<div class="layout">
-    <div class="main-content">
-        
-        <header class="app-header">
-            <div class="brand-box">
-                <a href="{{ url_for('dashboard') }}" class="brand-logo-link">
-                    <div class="brand-mark"><i class="fa-solid fa-store"></i></div>
-                    <div class="brand-wordmark">
-                        <strong>Mike</strong><span>Shop</span>
-                        <small>STORE MANAGEMENT</small>
-                    </div>
-                </a>
-            </div>
-            <nav class="top-nav">
-                <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
-                <a href="{{ url_for('sales_history') }}"><i class="fa-solid fa-chart-line"></i> Analytics</a>
-                <a href="{{ url_for('reports') }}" class="active v2-feature"><i class="fa-solid fa-file-pdf"></i> Reports</a>
-            </nav>
-            <div class="header-right">
-                <div class="user-info">👤 <span>{{ username }}</span> <span class="user-role">{{ role|capitalize }}</span></div>
-                <a href="{{ url_for('logout') }}" class="logout">Logout</a>
-            </div>
-        </header>
+{% block title %}Reports & Analytics | MikeShop{% endblock %}
 
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}{% for msg in messages %}<div class="flash">{{ msg }}</div>{% endfor %}{% endif %}
-        {% endwith %}
+{% block extra_head %}
+<style>
+    .report-filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 20px; }
+    .report-filters label { font-size: 11px; font-weight: 700; color: var(--grey-dark); }
+    .report-filters input, .report-filters select { padding: 8px 12px; border: 1px solid var(--grey); border-radius: 8px; }
+    .report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .kpi-chart { background: var(--white); border: 1px solid var(--grey); border-radius: var(--radius); padding: 16px; }
+    .kpi-chart canvas { max-height: 300px; }
+    .growth-pill { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: 6px; }
+    .growth-up { background: var(--mint-light); color: var(--mint-dark); }
+    .growth-down { background: #FEE2E2; color: #B91C1C; }
+    .growth-flat { background: var(--grey-light); color: var(--grey-dark); }
+    .page-explainer { background: var(--sky-light, #EFF6FF); border: 1px solid var(--sky, #BAE6FD); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: var(--grey-dark); }
+    .summary-row { display: flex; gap: 20px; flex-wrap: wrap; }
+</style>
+{% endblock %}
 
-        <section class="inventory-advanced" style="border-left-color: var(--purple);">
-            <div class="section-header">
-                <div>
-                    <span class="section-eyebrow">ANALYTICS</span>
-                    <h2>Reports & Analytics</h2>
-                    <p>Generate and export business reports</p>
-                </div>
-            </div>
-
-            <!-- Report Filters -->
-            <div class="report-filters">
-                <label>
-                    Period
-                    <select id="reportDays" onchange="loadReportData()">
-                        <option value="7">Last 7 days</option>
-                        <option value="30" selected>Last 30 days</option>
-                        <option value="90">Last 90 days</option>
-                        <option value="365">Last year</option>
-                    </select>
-                </label>
-                <button class="primary-btn" onclick="loadReportData()"><i class="fa-solid fa-refresh"></i> Refresh</button>
-                <button class="secondary-btn" onclick="exportPDF()"><i class="fa-solid fa-file-pdf"></i> Export PDF</button>
-                <button class="secondary-btn" onclick="exportCSV()"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
-            </div>
-
-            <!-- KPI Summary -->
-            <div id="kpiSummary" class="report-grid">
-                <div class="stat-card"><div class="icon icon-mint"><i class="fa-solid fa-sack-dollar"></i></div>
-                    <div><div class="stat-value" id="kpiRevenue">$0</div><div class="stat-label">Revenue</div></div></div>
-                <div class="stat-card"><div class="icon icon-purple"><i class="fa-solid fa-arrow-trend-up"></i></div>
-                    <div><div class="stat-value" id="kpiProfit">$0</div><div class="stat-label">Profit</div></div></div>
-                <div class="stat-card"><div class="icon icon-sky"><i class="fa-solid fa-wallet"></i></div>
-                    <div><div class="stat-value" id="kpiExpenses">$0</div><div class="stat-label">Expenses</div></div></div>
-                <div class="stat-card"><div class="icon icon-mint"><i class="fa-solid fa-chart-simple"></i></div>
-                    <div><div class="stat-value" id="kpiNet">$0</div><div class="stat-label">Net Profit</div></div></div>
-                <div class="stat-card"><div class="icon icon-sky"><i class="fa-solid fa-box"></i></div>
-                    <div><div class="stat-value" id="kpiTransactions">0</div><div class="stat-label">Transactions</div></div></div>
-                <div class="stat-card"><div class="icon icon-purple"><i class="fa-solid fa-cubes"></i></div>
-                    <div><div class="stat-value" id="kpiItems">0</div><div class="stat-label">Items Sold</div></div></div>
-            </div>
-
-            <!-- Charts -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                <div class="kpi-chart">
-                    <h4>Daily Revenue Trend</h4>
-                    <canvas id="revenueChart"></canvas>
-                </div>
-                <div class="kpi-chart">
-                    <h4>Top Products</h4>
-                    <canvas id="productsChart"></canvas>
-                </div>
-                <div class="kpi-chart" style="grid-column: 1/-1;">
-                    <h4>Staff Performance</h4>
-                    <canvas id="staffChart"></canvas>
-                </div>
-            </div>
-
-            <!-- Inventory Summary -->
-            <div style="margin-top: 20px; background: var(--grey-light); padding: 16px; border-radius: var(--radius);">
-                <h4>📦 Inventory Summary</h4>
-                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                    <span><strong>Total Inventory Value:</strong> <span id="inventoryValue">$0</span></span>
-                    <span><strong>Total Products:</strong> <span id="totalProducts">0</span></span>
-                </div>
-            </div>
-        </section>
+{% block content %}
+<section class="inventory-advanced" style="border-left-color: var(--purple);">
+    <div class="section-header">
+        <div>
+            <span class="section-eyebrow">ANALYTICS</span>
+            <h2>Reports & Analytics</h2>
+            <p>A summary of the whole business — is it growing, and where does it stand right now?</p>
+        </div>
     </div>
-</div>
 
+    <div class="page-explainer">
+        <strong>What this page is for:</strong> Reports summarizes the whole app and compares each period against the one before it, so you can tell whether the business is growing. For a complete, unfiltered record of every transaction ever made, use <a href="{{ url_for('sales_history') }}">Analytics</a> instead — that page never expires or resets.
+    </div>
+
+    <!-- Report Filters -->
+    <div class="report-filters">
+        <label>
+            Compare period
+            <select id="reportDays" onchange="loadReportData()">
+                <option value="7">Last 7 days (vs the 7 before)</option>
+                <option value="30" selected>Last 30 days (vs the 30 before)</option>
+                <option value="90">Last 90 days (vs the 90 before)</option>
+                <option value="365">Last year (vs the year before)</option>
+            </select>
+        </label>
+        <button class="primary-btn" onclick="loadReportData()"><i class="fa-solid fa-refresh"></i> Refresh</button>
+        <button class="secondary-btn" onclick="exportPDF()"><i class="fa-solid fa-file-pdf"></i> Export PDF</button>
+        <button class="secondary-btn" onclick="exportCSV()"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
+    </div>
+
+    <!-- KPI Summary -->
+    <div id="kpiSummary" class="report-grid">
+        <div class="stat-card"><div class="icon icon-mint"><i class="fa-solid fa-sack-dollar"></i></div>
+            <div><div class="stat-value" id="kpiRevenue">$0 <span id="kpiRevenueGrowth"></span></div><div class="stat-label">Revenue</div></div></div>
+        {% if role == 'owner' %}
+        <div class="stat-card"><div class="icon icon-purple"><i class="fa-solid fa-arrow-trend-up"></i></div>
+            <div><div class="stat-value" id="kpiProfit">$0 <span id="kpiProfitGrowth"></span></div><div class="stat-label">Profit</div></div></div>
+        <div class="stat-card"><div class="icon icon-sky"><i class="fa-solid fa-wallet"></i></div>
+            <div><div class="stat-value" id="kpiExpenses">$0</div><div class="stat-label">Expenses</div></div></div>
+        <div class="stat-card"><div class="icon icon-mint"><i class="fa-solid fa-chart-simple"></i></div>
+            <div><div class="stat-value" id="kpiNet">$0</div><div class="stat-label">Net Profit</div></div></div>
+        {% endif %}
+        <div class="stat-card"><div class="icon icon-sky"><i class="fa-solid fa-box"></i></div>
+            <div><div class="stat-value" id="kpiTransactions">0 <span id="kpiTransactionsGrowth"></span></div><div class="stat-label">Transactions</div></div></div>
+        <div class="stat-card"><div class="icon icon-purple"><i class="fa-solid fa-cubes"></i></div>
+            <div><div class="stat-value" id="kpiItems">0</div><div class="stat-label">Items Sold</div></div></div>
+    </div>
+
+    <!-- Charts -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div class="kpi-chart">
+            <h4>Daily Revenue Trend</h4>
+            <canvas id="revenueChart"></canvas>
+        </div>
+        <div class="kpi-chart">
+            <h4>Top Products</h4>
+            <canvas id="productsChart"></canvas>
+        </div>
+        <div class="kpi-chart" style="grid-column: 1/-1;">
+            <h4>Staff Performance</h4>
+            <canvas id="staffChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Whole-app summary -->
+    <div style="margin-top: 20px; background: var(--grey-light); padding: 16px; border-radius: var(--radius);">
+        <h4>🏪 Business Summary</h4>
+        <div class="summary-row">
+            <span><strong>Active Inventory Value:</strong> <span id="activeInventoryValue">$0</span></span>
+            <span><strong>Depreciating Stock Value:</strong> <span id="depreciatingValue">$0</span> <small>(discontinued items, written down over time)</small></span>
+            <span><strong>Total Products:</strong> <span id="totalProducts">0</span></span>
+            <span><strong>Customers:</strong> <span id="totalCustomers">0</span> <small id="newCustomers"></small></span>
+            <span><strong>Staff Accounts:</strong> <span id="totalStaff">0</span></span>
+            <span><strong>Low Stock Alerts:</strong> <span id="lowStockCount">0</span></span>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
 <script>
 let revenueChart = null, productsChart = null, staffChart = null;
+
+function growthPill(pct, elId) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (pct === null || pct === undefined) { el.textContent = ''; return; }
+    const cls = pct > 0 ? 'growth-up' : (pct < 0 ? 'growth-down' : 'growth-flat');
+    const arrow = pct > 0 ? '▲' : (pct < 0 ? '▼' : '—');
+    el.innerHTML = `<span class="growth-pill ${cls}">${arrow} ${Math.abs(pct)}%</span>`;
+}
 
 async function loadReportData() {
     const days = document.getElementById('reportDays').value;
@@ -126,17 +118,27 @@ async function loadReportData() {
         const response = await fetch(`/api/report/sales_summary?days=${days}`);
         const data = await response.json();
         
-        // Update KPIs
-        document.getElementById('kpiRevenue').textContent = `$${data.total_revenue.toFixed(2)}`;
-        document.getElementById('kpiProfit').textContent = `$${data.total_profit.toFixed(2)}`;
-        document.getElementById('kpiExpenses').textContent = `$${data.total_expenses.toFixed(2)}`;
-        document.getElementById('kpiNet').textContent = `$${data.net_profit.toFixed(2)}`;
-        document.getElementById('kpiTransactions').textContent = data.total_transactions;
+        document.getElementById('kpiRevenue').childNodes[0].textContent = `$${data.total_revenue.toFixed(2)} `;
+        document.getElementById('kpiTransactions').childNodes[0].textContent = `${data.total_transactions} `;
         document.getElementById('kpiItems').textContent = data.total_items_sold;
-        document.getElementById('inventoryValue').textContent = `$${data.inventory_value.toFixed(2)}`;
+        growthPill(data.growth.revenue_pct, 'kpiRevenueGrowth');
+        growthPill(data.growth.transactions_pct, 'kpiTransactionsGrowth');
+
+        if (data.total_profit !== null && document.getElementById('kpiProfit')) {
+            document.getElementById('kpiProfit').childNodes[0].textContent = `$${data.total_profit.toFixed(2)} `;
+            document.getElementById('kpiExpenses').textContent = `$${data.total_expenses.toFixed(2)}`;
+            document.getElementById('kpiNet').textContent = `$${data.net_profit.toFixed(2)}`;
+            growthPill(data.growth.profit_pct, 'kpiProfitGrowth');
+        }
+
+        document.getElementById('activeInventoryValue').textContent = `$${data.active_inventory_value.toFixed(2)}`;
+        document.getElementById('depreciatingValue').textContent = `$${data.depreciating_inventory_value.toFixed(2)}`;
         document.getElementById('totalProducts').textContent = data.total_products;
+        document.getElementById('totalCustomers').textContent = data.total_customers;
+        document.getElementById('newCustomers').textContent = data.new_customers_this_period > 0 ? `(+${data.new_customers_this_period} new)` : '';
+        document.getElementById('totalStaff').textContent = data.total_staff;
+        document.getElementById('lowStockCount').textContent = data.low_stock_count;
         
-        // Revenue Chart
         const ctx1 = document.getElementById('revenueChart').getContext('2d');
         if (revenueChart) revenueChart.destroy();
         revenueChart = new Chart(ctx1, {
@@ -155,7 +157,6 @@ async function loadReportData() {
             options: { responsive: true, plugins: { legend: { display: false } } }
         });
         
-        // Products Chart
         const ctx2 = document.getElementById('productsChart').getContext('2d');
         if (productsChart) productsChart.destroy();
         productsChart = new Chart(ctx2, {
@@ -172,7 +173,6 @@ async function loadReportData() {
             options: { responsive: true, plugins: { legend: { display: false } } }
         });
         
-        // Staff Chart
         const ctx3 = document.getElementById('staffChart').getContext('2d');
         if (staffChart) staffChart.destroy();
         staffChart = new Chart(ctx3, {
@@ -206,6 +206,4 @@ function exportCSV() {
 
 document.addEventListener('DOMContentLoaded', loadReportData);
 </script>
-<script src="{{ url_for('static', filename='script.js') }}"></script>
-</body>
-</html>
+{% endblock %}

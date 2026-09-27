@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import session, request, jsonify, abort, redirect, url_for, current_app
+from flask import session, request, jsonify, abort, redirect, url_for, current_app, g
 import hmac
 from datetime import datetime, timedelta
 
@@ -31,10 +31,35 @@ def api_key_required(f):
     def decorated_function(*args, **kwargs):
         api_key = request.headers.get('X-API-Key')
         expected_key = current_app.config.get('API_KEY')
+        bearer = request.headers.get('Authorization', '')
+
+        # Server-to-server clients may still use the explicit API key.
+        if api_key and expected_key and hmac.compare_digest(api_key, expected_key):
+            # A shared server-to-server key authenticates the client, but it
+            # does not identify an employee. Treat it as non-owner for
+            # confidentiality-sensitive responses.
+            g.api_user = None
+            g.api_auth_method = 'api_key'
+            return f(*args, **kwargs)
+
+        # Mobile/web clients should use the short-lived login token instead
+        # of a shared credential.
+        if bearer.startswith('Bearer '):
+            from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+            from models.core import User
+            token = bearer[7:].strip()
+            try:
+                data = URLSafeTimedSerializer(current_app.config['SECRET_KEY']).loads(token, max_age=43200)
+                user = User.query.get(int(data['user_id']))
+                if user and user.is_active:
+                    g.api_user = user
+                    g.api_auth_method = 'bearer'
+                    return f(*args, **kwargs)
+            except (BadSignature, SignatureExpired, ValueError, KeyError, TypeError):
+                pass
+
+        return jsonify({'error': 'Invalid or missing API credentials'}), 401
         
-        if not api_key or not expected_key or not hmac.compare_digest(api_key, expected_key):
-            return jsonify({'error': 'Invalid or missing API key'}), 401
-        return f(*args, **kwargs)
     return decorated_function
 
 def log_activity(action):

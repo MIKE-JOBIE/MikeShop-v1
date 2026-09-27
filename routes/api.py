@@ -1,13 +1,15 @@
 # routes/api.py - Mobile App API (aligned with variant-based inventory)
-from flask import request, jsonify
-from app import app, csrf
+from flask import request, jsonify, g
+from app import app, csrf, depreciated_value
 from database import db
 from models.core import (
     Shoe, ShoeSize, Sale, User,
     Product, ProductVariant
 )
-from models.customer import Customer
+from models.customer import Customer, CustomerPurchase
 from decorators import api_key_required
+from database import limiter
+from itsdangerous import URLSafeTimedSerializer
 from werkzeug.security import check_password_hash
 from datetime import datetime, timedelta
 from sqlalchemy import func
@@ -18,6 +20,7 @@ import hmac
 # ==================== AUTH ====================
 @app.route('/api/v1/auth/login', methods=['POST'])
 @csrf.exempt
+@limiter.limit('5 per minute')
 def api_login():
     """Mobile app login - returns token."""
     data = request.json or {}
@@ -25,16 +28,10 @@ def api_login():
     password = data.get('password', '')
 
     user = User.query.filter_by(username=username).first()
-    if not user or not check_password_hash(user.password_hash, password):
+    if not user or not user.is_active or not check_password_hash(user.password_hash, password):
         return jsonify({'error': 'Invalid credentials'}), 401
 
-    token_data = f"{user.id}:{username}:{datetime.now().timestamp()}"
-    token = hmac.new(
-        app.config['SECRET_KEY'].encode(),
-        token_data.encode(),
-        hashlib.sha256
-    ).hexdigest()
-
+    token = URLSafeTimedSerializer(app.config['SECRET_KEY']).dumps({'user_id': user.id})
     return jsonify({
         'status': 'success',
         'token': token,
@@ -59,7 +56,6 @@ def _shoe_to_dict(s):
                 'id': size.id,
                 'size': size.size,
                 'quantity': size.quantity,
-                'cost_usd': size.cost_usd,
                 'sell_usd': size.sell_usd
             } for size in s.sizes
         ],
@@ -82,7 +78,6 @@ def _product_to_dict(p):
                 'label': v.variant_label,
                 'value': v.variant_value,
                 'quantity': v.quantity,
-                'cost_usd': v.cost_usd,
                 'sell_usd': v.sell_usd
             } for v in p.variants
         ],
@@ -96,13 +91,12 @@ def _product_to_dict(p):
 @api_key_required
 def api_inventory():
     """Return shoes + products (unified)."""
-    shoes = Shoe.query.filter(Shoe.is_active == True).all()
-    products = Product.query.filter(Product.is_active == True).all()
-
-    return jsonify(
-        [_shoe_to_dict(s) for s in shoes] +
-        [_product_to_dict(p) for p in products]
-    )
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = min(100, max(1, request.args.get('per_page', 50, type=int)))
+    shoes = Shoe.query.filter(Shoe.is_active == True).order_by(Shoe.id).paginate(page=page, per_page=per_page, error_out=False)
+    products = Product.query.filter(Product.is_active == True).order_by(Product.id).paginate(page=page, per_page=per_page, error_out=False)
+    items = [_shoe_to_dict(s) for s in shoes.items] + [_product_to_dict(p) for p in products.items]
+    return jsonify({'items': items, 'page': page, 'per_page': per_page, 'shoe_pages': shoes.pages, 'product_pages': products.pages})
 
 
 @app.route('/api/v1/inventory/<int:shoe_id>')
@@ -146,7 +140,7 @@ def api_create_sale():
     if not size_id:
         return jsonify({'error': 'size_id is required'}), 400
 
-    shoe_size = ShoeSize.query.with_for_update().get_or_404(size_id)
+    shoe_size = ShoeSize.query.filter_by(id=size_id).with_for_update().first_or_404()
     shoe = shoe_size.shoe
 
     if quantity <= 0:
@@ -172,6 +166,7 @@ def api_create_sale():
             customer_id=customer_id
         )
         db.session.add(sale)
+        db.session.flush()  # populate sale.id before it's used below
 
         if customer_id:
             customer = Customer.query.get(customer_id)
@@ -180,6 +175,9 @@ def api_create_sale():
                 customer.total_orders = (customer.total_orders or 0) + 1
                 customer.last_purchase = datetime.utcnow()
                 customer.loyalty_points = (customer.loyalty_points or 0) + int(total_usd * 0.1)
+                db.session.add(CustomerPurchase(
+                    customer_id=customer.id, sale_id=sale.id, total_usd=total_usd
+                ))
 
         db.session.commit()
     except Exception as e:
@@ -190,7 +188,6 @@ def api_create_sale():
         'status': 'success',
         'sale_id': sale.id,
         'total': total_usd,
-        'profit': profit_usd,
         'remaining_stock': shoe_size.quantity
     })
 
@@ -215,7 +212,7 @@ def api_create_product_sale():
     if not variant_id:
         return jsonify({'error': 'variant_id is required'}), 400
 
-    variant = ProductVariant.query.with_for_update().get_or_404(variant_id)
+    variant = ProductVariant.query.filter_by(id=variant_id).with_for_update().first_or_404()
     product = variant.product
 
     if quantity <= 0:
@@ -241,6 +238,7 @@ def api_create_product_sale():
             customer_id=customer_id
         )
         db.session.add(sale)
+        db.session.flush()  # populate sale.id before it's used below
 
         if customer_id:
             customer = Customer.query.get(customer_id)
@@ -249,6 +247,9 @@ def api_create_product_sale():
                 customer.total_orders = (customer.total_orders or 0) + 1
                 customer.last_purchase = datetime.utcnow()
                 customer.loyalty_points = (customer.loyalty_points or 0) + int(total_usd * 0.1)
+                db.session.add(CustomerPurchase(
+                    customer_id=customer.id, sale_id=sale.id, total_usd=total_usd
+                ))
 
         db.session.commit()
     except Exception as e:
@@ -259,7 +260,6 @@ def api_create_product_sale():
         'status': 'success',
         'sale_id': sale.id,
         'total': total_usd,
-        'profit': profit_usd,
         'remaining_stock': variant.quantity
     })
 
@@ -268,52 +268,64 @@ def api_create_product_sale():
 @app.route('/api/v1/dashboard')
 @api_key_required
 def api_dashboard():
-    """Dashboard summary for mobile app."""
+    """Return a bounded dashboard summary without loading full tables into Python.
+
+    Financial/profit fields are owner-only. A shared API key is intentionally
+    treated as non-owner because it identifies an integration, not a person.
+    """
     today = datetime.utcnow().date()
     start = datetime(today.year, today.month, today.day)
     end = start + timedelta(days=1)
 
-    today_sales = Sale.query.filter(
-        Sale.date >= start,
-        Sale.date < end
-    ).all()
+    sales_row = db.session.query(
+        func.coalesce(func.sum(Sale.total_usd), 0),
+        func.coalesce(func.sum(Sale.quantity), 0),
+        func.coalesce(func.sum(Sale.profit_usd), 0),
+        func.count(Sale.id)
+    ).filter(Sale.date >= start, Sale.date < end).one()
 
-    total_sales = sum(s.total_usd for s in today_sales)
-    total_items = sum(s.quantity for s in today_sales)
-    profit = sum(s.profit_usd for s in today_sales)
+    shoe_low = db.session.query(func.count(ShoeSize.id)).join(Shoe).filter(
+        Shoe.is_active.is_(True), ShoeSize.quantity > 0, ShoeSize.quantity <= 10
+    ).scalar() or 0
+    product_low = db.session.query(func.count(ProductVariant.id)).join(Product).filter(
+        Product.is_active.is_(True), ProductVariant.quantity > 0, ProductVariant.quantity <= 10
+    ).scalar() or 0
 
-    # Low stock: shoes + product variants
-    low_stock_count = 0
-    for shoe in Shoe.query.filter(Shoe.is_active == True).all():
-        for size in shoe.sizes:
-            if 0 < size.quantity <= 10:
-                low_stock_count += 1
-    for product in Product.query.filter(Product.is_active == True).all():
-        for v in product.variants:
-            if 0 < v.quantity <= 10:
-                low_stock_count += 1
+    active_shoe_value = db.session.query(
+        func.coalesce(func.sum(ShoeSize.cost_usd * ShoeSize.quantity), 0)
+    ).join(Shoe).filter(Shoe.is_active.is_(True)).scalar() or 0
+    active_product_value = db.session.query(
+        func.coalesce(func.sum(ProductVariant.cost_usd * ProductVariant.quantity), 0)
+    ).join(Product).filter(Product.is_active.is_(True)).scalar() or 0
 
-    # Inventory value
-    shoe_value = sum(
-        (size.cost_usd or 0) * (size.quantity or 0)
-        for shoe in Shoe.query.all() for size in shoe.sizes
-    )
-    product_value = sum(
-        (v.cost_usd or 0) * (v.quantity or 0)
-        for product in Product.query.all() for v in product.variants
-    )
+    # Discontinued inventory is normally small; retain Python depreciation
+    # here because the calculation is deliberately database-neutral across
+    # SQLite and PostgreSQL. Active inventory—the hot path—is SQL aggregated.
+    depreciating_value = 0.0
+    for shoe in Shoe.query.filter(Shoe.is_active.is_(False)).yield_per(500):
+        total = sum((s.cost_usd or 0) * (s.quantity or 0) for s in shoe.sizes)
+        depreciating_value += depreciated_value(total, shoe.deactivated_at)
+    for product in Product.query.filter(Product.is_active.is_(False)).yield_per(500):
+        total = sum((v.cost_usd or 0) * (v.quantity or 0) for v in product.variants)
+        depreciating_value += depreciated_value(total, product.deactivated_at)
 
-    return jsonify({
-        'total_sales': float(total_sales),
-        'total_items': total_items,
-        'transactions': len(today_sales),
-        'profit': float(profit),
-        'low_stock_items': low_stock_count,
-        'inventory_value': float(shoe_value + product_value)
-    })
+    response = {
+        'status': 'success',
+        'today_sales': float(sales_row[0] or 0),
+        'today_items': int(sales_row[1] or 0),
+        'today_transactions': int(sales_row[3] or 0),
+        'low_stock_count': int(shoe_low + product_low),
+        'active_inventory_value': float(active_shoe_value + active_product_value),
+        'depreciating_inventory_value': round(depreciating_value, 2),
+    }
+
+    api_user = getattr(g, 'api_user', None)
+    if api_user and api_user.role and api_user.role.name == 'owner':
+        response['profit'] = float(sales_row[2] or 0)
+        response['inventory_value'] = float(active_shoe_value + active_product_value + depreciating_value)
+    return jsonify(response)
 
 
-# ==================== REPORTING ====================
 @app.route('/api/v1/report/sales')
 @api_key_required
 def api_sales_report():

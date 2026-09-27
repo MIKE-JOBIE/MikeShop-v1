@@ -68,14 +68,16 @@ def customer_detail(customer_id):
     # Get last purchase date
     last_purchase = customer.last_purchase
     
-    # Get all sales for this customer
-    sales = Sale.query.filter_by(customer_id=customer.id).order_by(Sale.date.desc()).all()
+    sales_page = request.args.get('page', 1, type=int)
+    sales = Sale.query.filter_by(customer_id=customer.id).order_by(Sale.date.desc()).paginate(
+        page=sales_page, per_page=20, error_out=False
+    )
     
     return render_template(
         'admin/customer_detail.html',
         customer=customer,
         purchases=purchases,
-        sales=sales,  # Pass all sales
+        sales=sales,  # Paginated customer sales
         total_spent=total_spent,
         total_orders=total_orders,
         loyalty_points=loyalty_points,

@@ -159,7 +159,7 @@ function getSllRate() {
 async function loadKpi(range) {
     try {
         localStorage.setItem('kpiPeriod', range);
-        const response = await fetch(`/kpi-data?range=${encodeURIComponent(range)}`);
+        const response = await fetch(`/kpi-data?range=${encodeURIComponent(range)}`, { cache: "no-store", credentials: "same-origin", headers: { "Accept": "application/json", "Cache-Control": "no-cache" } });
         if (!response.ok) throw new Error("Unable to load KPI data.");
         const data = await response.json();
 
@@ -225,6 +225,70 @@ function initializeKpiButtons() {
         updateKpiPeriodText(savedRange);
     }
 }
+
+
+/* =========================================================
+   ADD PRODUCT: LIVE DUPLICATE GUARD
+========================================================= */
+(function initializeAddProductGuard() {
+    const form = document.getElementById('addProductForm');
+    if (!form) return;
+    const category = document.getElementById('product-category');
+    const brand = document.getElementById('product-brand');
+    const model = document.getElementById('product-model');
+    const submit = form.querySelector('button[type="submit"]');
+    const variant = document.getElementById('product-variant-value');
+    const mark = document.getElementById('model-required-mark');
+    let timer = null;
+
+    function updateLabels() {
+        if (!category || !model) return;
+        const shoe = category.value === 'shoe';
+        model.required = shoe;
+        if (mark) mark.textContent = shoe ? '*' : '';
+        if (variant) {
+            variant.placeholder = shoe ? 'e.g. 40' : ({clothing:'e.g. L', grocery:'e.g. 1kg', electronics:'e.g. Black / 128GB', other:'e.g. Standard'}[category.value] || 'e.g. Standard');
+        }
+    }
+
+    async function checkDuplicate() {
+        if (!brand || !category || !submit) return;
+        const b = brand.value.trim();
+        const m = model ? model.value.trim() : '';
+        if (!b || (category.value === 'shoe' && !m)) return;
+        try {
+            const params = new URLSearchParams({category: category.value, brand: b, model: m});
+            const response = await fetch(`/api/check_product_exists?${params.toString()}`, {cache:"no-store", credentials:"same-origin", headers:{"Accept":"application/json","Cache-Control":"no-cache"}});
+            if (!response.ok) return;
+            const data = await response.json();
+            let warning = form.querySelector('.duplicate-product-warning');
+            if (data.exists) {
+                if (!warning) {
+                    warning = document.createElement('div');
+                    warning.className = 'duplicate-product-warning';
+                    warning.setAttribute('role','alert');
+                    warning.style.cssText = 'grid-column:1/-1;padding:12px;border:1px solid var(--warning);border-radius:8px;background:var(--warning-soft);color:var(--text);font-weight:700;';
+                    form.querySelector('.form-fieldset').prepend(warning);
+                }
+                warning.innerHTML = `This product already exists. <a href="#restock-section" class="alert-action">Use Restock / Add Variant instead.</a>`;
+                submit.disabled = true;
+                submit.setAttribute('aria-disabled','true');
+            } else {
+                if (warning) warning.remove();
+                submit.disabled = false;
+                submit.removeAttribute('aria-disabled');
+            }
+        } catch (e) { /* server-side validation remains authoritative */ }
+    }
+
+    function scheduleCheck() { clearTimeout(timer); timer = setTimeout(checkDuplicate, 250); }
+    [category, brand, model].filter(Boolean).forEach(el => el.addEventListener('input', scheduleCheck));
+    if (category) category.addEventListener('change', () => { updateLabels(); scheduleCheck(); });
+    updateLabels();
+    form.addEventListener('submit', (e) => {
+        if (submit.disabled) { e.preventDefault(); }
+    });
+})();
 
 /* =========================================================
    DASHBOARD INVENTORY SEARCH
@@ -446,30 +510,115 @@ function escapeHtml(value) {
     return div.innerHTML;
 }
 
+let notificationSyncTimer = null;
+const renderedNotificationIds = new Set();
+
+function registerNotificationId(id) {
+    if (id !== undefined && id !== null) renderedNotificationIds.add(String(id));
+}
+
+function renderNotificationItem(notification, prepend = true) {
+    const panel = document.getElementById("notificationPanel");
+    if (!panel || !notification || notification.id == null) return;
+    const id = String(notification.id);
+    if (renderedNotificationIds.has(id)) return;
+
+    const empty = panel.querySelector(".alert-item:not([data-id])");
+    if (empty) empty.remove();
+
+    const item = document.createElement("div");
+    item.className = `alert-item ${notification.is_read ? "" : "unread"} fade-in`.trim();
+    item.dataset.id = id;
+    item.onclick = function () { markSingleRead(item); };
+    item.innerHTML = `
+        <div class="alert-message">${escapeHtml(notification.message || "New notification")}</div>
+        <div class="alert-time">${escapeHtml(notification.created_at || "Just now")}</div>
+    `;
+    if (prepend) panel.prepend(item);
+    else panel.appendChild(item);
+    registerNotificationId(id);
+}
+
+let _lastSyncAt = 0;
+
+async function syncNotifications(playSound = false) {
+    // Collapse overlapping syncs (page load + socket connect + interval).
+    const now = Date.now();
+    if (!playSound && now - _lastSyncAt < 1500) return;
+    _lastSyncAt = now;
+    try {
+        const response = await fetch("/notifications-feed", {
+            method: "GET",
+            credentials: "same-origin",
+            cache: "no-store",
+            headers: { "Accept": "application/json", "Cache-Control": "no-cache" }
+        });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const panel = document.getElementById("notificationPanel");
+        if (!panel) return;
+
+        const incoming = Array.isArray(data.notifications) ? data.notifications : [];
+        incoming.slice().reverse().forEach(n => renderNotificationItem(n, false));
+
+        // Reconcile read/unread state and order with the server truth.
+        incoming.forEach(n => {
+            const item = panel.querySelector(`.alert-item[data-id="${CSS.escape(String(n.id))}"]`);
+            if (item) item.classList.toggle("unread", !n.is_read);
+        });
+
+        incoming.forEach(n => registerNotificationId(n.id));
+        unreadCount = Number(data.unread_count || 0);
+        updateBadge();
+
+        if (playSound) playNotificationSound();
+    } catch (error) {
+        console.debug("Notification sync unavailable:", error);
+    }
+}
+
 function initializeNotifications() {
     const panel = document.getElementById("notificationPanel");
-    if (!panel || typeof io === "undefined") return;
+    if (!panel) return;
 
-    const socket = io();
-    socket.on("new_notification", function(data) {
-        const notificationPanel = document.getElementById("notificationPanel");
-        if (!notificationPanel) return;
+    panel.querySelectorAll(".alert-item[data-id]").forEach(item => registerNotificationId(item.dataset.id));
 
-        const item = document.createElement("div");
-        item.className = "alert-item unread fade-in";
-        item.innerHTML = `
-            <div class="alert-message">${escapeHtml(data.message || "New notification")}</div>
-            <div class="alert-time">Just now</div>
-        `;
-        notificationPanel.prepend(item);
+    syncNotifications(false);
 
-        if (typeof data.unread_count !== "undefined") {
-            unreadCount = Number(data.unread_count);
-        } else {
-            unreadCount++;
-        }
-        updateBadge();
-        playNotificationSound();
+    if (typeof io !== "undefined") {
+        const socket = io({
+            transports: ["websocket", "polling"],
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000
+        });
+
+        socket.on("connect", () => syncNotifications(false));
+        socket.on("connect_error", () => syncNotifications(false));
+        socket.on("new_notification", function (data) {
+            renderNotificationItem({
+                id: data.id,
+                message: data.message || "New notification",
+                category: data.category || "general",
+                is_read: false,
+                created_at: "Just now"
+            });
+            unreadCount = Number(data.unread_count ?? (unreadCount + 1));
+            updateBadge();
+            playNotificationSound();
+        });
+    }
+
+    // Socket.IO is the fast path; polling is the reliability fallback for
+    // missed events, sleeping tabs, reconnects, and multi-process deployments.
+    clearInterval(notificationSyncTimer);
+    notificationSyncTimer = setInterval(() => syncNotifications(false), 3000);
+
+    window.addEventListener("focus", () => syncNotifications(false));
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) syncNotifications(false);
     });
 }
 

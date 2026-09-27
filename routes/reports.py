@@ -1,12 +1,13 @@
 # routes/reports.py
 from flask import Flask, jsonify, render_template, request, redirect, url_for, session, flash, send_file
-from app import app, csrf
+from app import app, csrf, depreciated_value
 from database import db
 from models.core import (
-    Sale, Expense, Shoe, ShoeSize, User, Notification,
+    Sale, Expense, Shoe, ShoeSize, User, Role, Notification,
     Product, ProductVariant,
 )
 from decorators import login_required, role_required
+from routes.admin import LOW_STOCK_THRESHOLD
 from datetime import datetime, timedelta
 from sqlalchemy import func
 import io
@@ -46,17 +47,39 @@ def reports():
 @login_required
 @role_required('owner', 'admin')
 def sales_summary_report():
+    from models.customer import Customer
     days = request.args.get('days', 30, type=int)
-    start_date = datetime.utcnow() - timedelta(days=days)
-    
-    # Total sales
-    total_sales = db.session.query(
-        func.sum(Sale.total_usd).label('revenue'),
-        func.sum(Sale.profit_usd).label('profit'),
-        func.count(Sale.id).label('count'),
-        func.sum(Sale.quantity).label('items')
-    ).filter(Sale.date >= start_date).first()
-    
+    now = datetime.utcnow()
+    start_date = now - timedelta(days=days)
+    # Previous period of equal length, immediately before this one — this
+    # is what "is my business growing" actually compares against.
+    prev_start = start_date - timedelta(days=days)
+    prev_end = start_date
+
+    is_owner = session.get('role') == 'owner'
+
+    def period_totals(period_start, period_end=None):
+        q = db.session.query(
+            func.coalesce(func.sum(Sale.total_usd), 0).label('revenue'),
+            func.coalesce(func.sum(Sale.profit_usd), 0).label('profit'),
+            func.count(Sale.id).label('count'),
+            func.coalesce(func.sum(Sale.quantity), 0).label('items')
+        ).filter(Sale.date >= period_start)
+        if period_end is not None:
+            q = q.filter(Sale.date < period_end)
+        return q.first()
+
+    total_sales = period_totals(start_date)
+    prev_sales = period_totals(prev_start, prev_end)
+
+    def pct_change(current, previous):
+        """% change vs the previous period. None (shown as 'N/A', not 0%
+        or infinity) when there's no previous-period data to compare
+        against — a real "no baseline" case, not a 0% or -100% change."""
+        if not previous:
+            return None
+        return round(((current - previous) / previous) * 100, 1)
+
     # Daily breakdown
     daily = db.session.query(
         func.date(Sale.date).label('day'),
@@ -115,34 +138,71 @@ def sales_summary_report():
         Sale.sold_by
     ).order_by(func.sum(Sale.total_usd).desc()).limit(5).all()
     
-    # Expenses
+    # Expenses (owner-only, see below)
     total_expenses = db.session.query(
         func.sum(Expense.amount_usd)
     ).filter(Expense.date >= start_date).scalar() or 0
-    
-    # Inventory value — shoes (sum over sizes) + products (sum over variants)
-    shoe_value = db.session.query(
+
+    # Inventory value — split into two figures rather than one that either
+    # hides discontinued stock entirely or counts it at full value forever:
+    #   - Active: current sellable stock, at full cost value
+    #   - Depreciating: discontinued stock, written down over time
+    #     (see depreciated_value() in app.py) toward $0
+    active_shoe_value = db.session.query(
         func.coalesce(func.sum(ShoeSize.cost_usd * ShoeSize.quantity), 0)
-    ).scalar() or 0
+    ).join(Shoe, ShoeSize.shoe_id == Shoe.id).filter(Shoe.is_active == True).scalar() or 0
 
-    product_value = db.session.query(
+    active_product_value = db.session.query(
         func.coalesce(func.sum(ProductVariant.cost_usd * ProductVariant.quantity), 0)
-    ).scalar() or 0
+    ).join(Product, ProductVariant.product_id == Product.id).filter(Product.is_active == True).scalar() or 0
 
-    total_inventory_value = float(shoe_value) + float(product_value)
+    active_inventory_value = float(active_shoe_value) + float(active_product_value)
+
+    # Depreciating value needs a per-item calculation (each item has its
+    # own deactivated_at), so this loads the (typically small) set of
+    # discontinued items rather than using a single SQL aggregate.
+    depreciating_value = 0.0
+    for shoe in Shoe.query.filter(Shoe.is_active == False).all():
+        shoe_cost_total = sum((s.cost_usd or 0) * (s.quantity or 0) for s in shoe.sizes)
+        depreciating_value += depreciated_value(shoe_cost_total, shoe.deactivated_at)
+    for product in Product.query.filter(Product.is_active == False).all():
+        product_cost_total = sum((v.cost_usd or 0) * (v.quantity or 0) for v in product.variants)
+        depreciating_value += depreciated_value(product_cost_total, product.deactivated_at)
+
+    total_inventory_value = active_inventory_value + depreciating_value
 
     # Total distinct products (shoes + non-shoe products)
     total_products = Shoe.query.count() + Product.query.count()
-    
-    return jsonify({
+
+    # Whole-app summary — customers, staff, low stock. This is what makes
+    # Reports a summary of the whole app rather than just a sales report.
+    total_customers = Customer.query.count()
+    new_customers_this_period = Customer.query.filter(Customer.created_at >= start_date).count()
+    total_staff = User.query.join(Role).filter(Role.name != 'owner').count()
+    low_stock_shoe_sizes = db.session.query(ShoeSize).join(Shoe).filter(
+        Shoe.is_active == True, ShoeSize.quantity <= LOW_STOCK_THRESHOLD, ShoeSize.quantity > 0
+    ).count()
+    low_stock_variants = db.session.query(ProductVariant).join(Product).filter(
+        Product.is_active == True, ProductVariant.quantity <= LOW_STOCK_THRESHOLD, ProductVariant.quantity > 0
+    ).count()
+
+    response = {
+        'period_days': days,
         'total_revenue': float(total_sales.revenue or 0),
-        'total_profit': float(total_sales.profit or 0),
         'total_transactions': total_sales.count or 0,
         'total_items_sold': total_sales.items or 0,
-        'total_expenses': float(total_expenses),
-        'net_profit': float((total_sales.profit or 0) - total_expenses),
         'inventory_value': float(total_inventory_value),
+        'active_inventory_value': float(active_inventory_value),
+        'depreciating_inventory_value': round(float(depreciating_value), 2),
         'total_products': total_products,
+        'total_customers': total_customers,
+        'new_customers_this_period': new_customers_this_period,
+        'total_staff': total_staff,
+        'low_stock_count': low_stock_shoe_sizes + low_stock_variants,
+        'growth': {
+            'revenue_pct': pct_change(total_sales.revenue or 0, prev_sales.revenue or 0),
+            'transactions_pct': pct_change(total_sales.count or 0, prev_sales.count or 0),
+        },
         'daily': [
             {
                 'date': d.day,
@@ -159,7 +219,23 @@ def sales_summary_report():
                 'sales': s.count or 0
             } for s in top_staff
         ]
-    })
+    }
+
+    # Profit, expenses, and net profit are owner-only — same policy as the
+    # Dashboard. An admin calling this endpoint directly should not get
+    # these fields either, not just have them hidden in the UI.
+    if is_owner:
+        response['total_profit'] = float(total_sales.profit or 0)
+        response['total_expenses'] = float(total_expenses)
+        response['net_profit'] = float((total_sales.profit or 0) - total_expenses)
+        response['growth']['profit_pct'] = pct_change(total_sales.profit or 0, prev_sales.profit or 0)
+    else:
+        response['total_profit'] = None
+        response['total_expenses'] = None
+        response['net_profit'] = None
+        response['growth']['profit_pct'] = None
+
+    return jsonify(response)
 
 @app.route('/export/report/pdf')
 @login_required

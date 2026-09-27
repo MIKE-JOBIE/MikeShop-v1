@@ -1,97 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="csrf-token" content="{{ csrf_token() }}">
-<title>Dashboard | MikeShop</title>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+{% extends "layouts/admin_layout.html" %}
 
-</head>
-<body data-daily-sales='{{ daily_sales | tojson | forceescape }}'
+{% block title %}Dashboard | MikeShop{% endblock %}
+
+{% block body_attrs %}data-daily-sales='{{ daily_sales | tojson | forceescape }}'
 data-best-sellers='{{ best_sellers | tojson | forceescape }}'
 data-unread-alerts="{{ unread_alerts | default(0) }}"
-data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
+data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}"{% endblock %}
 
-<div class="layout">
-<div class="main-content">
-
-    <!-- ==================== HEADER ==================== -->
-    <header class="app-header">
-        <div class="brand-box">
-            <a href="{{ url_for('dashboard') }}" class="brand-logo-link">
-                <div class="brand-mark">
-                    <i class="fa-solid fa-store"></i>
-                </div>
-                <div class="brand-wordmark">
-                    <strong>Mike</strong><span>Shop</span>
-                    <small>STORE MANAGEMENT</small>
-                </div>
-            </a>
-        </div>
-        
-        <nav class="top-nav">
-            <a href="{{ url_for('dashboard') }}" class="active">
-                <i class="fa-solid fa-gauge-high"></i> Dashboard
-            </a>
-            <a href="{{ url_for('sales_history') }}">
-                <i class="fa-solid fa-chart-line"></i> Analytics
-            </a>
-            <a href="{{ url_for('customers') }}" class="v2-feature">
-                <i class="fa-solid fa-users"></i> Customers
-            </a>
-            <a href="{{ url_for('reports') }}" class="v2-feature">
-                <i class="fa-solid fa-file-pdf"></i> Reports
-            </a>
-        </nav>
-    
-        <div class="header-right">
-            <div class="user-info">
-                👤 <span>{{ username }}</span>
-                <span class="user-role">{{ role|capitalize }}</span>
-            </div>
-    
-            <div class="notification-wrapper">
-                <button class="alert-btn" onclick="toggleNotifications()">
-                    <i class="fa-solid fa-bell"></i>
-                    {% if unread_alerts > 0 %}
-                    <span class="alert-dot">{{ unread_alerts }}</span>
-                    {% endif %}
-                </button>
-                <div id="notificationPanel" class="alert-menu">
-                    <div class="alert-header">
-                        <h4>Notifications</h4>
-                        <button class="mark-all" onclick="markAllRead()">Mark all read</button>
-                    </div>
-                    {% if notifications %}
-                        {% for n in notifications %}
-                        <div class="alert-item {% if not n.is_read %}unread{% endif %}" 
-                             data-id="{{ n.id }}"
-                             onclick="markSingleRead(this)">
-                            <div class="alert-message">{{ n.message }}</div>
-                            <div class="alert-time">{{ n.created_at.strftime("%d %b %H:%M") }}</div>
-                        </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="alert-item">No notifications 🎉</div>
-                    {% endif %}
-                </div>
-            </div>
-            <a href="{{ url_for('logout') }}" class="logout">Logout</a>
-        </div>
-    </header>
-
-    <!-- ==================== FLASH MESSAGES ==================== -->
-    {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            {% for msg in messages %}
-                <div class="flash">{{ msg }}</div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
+{% block content %}
+<div class="page-explainer">
+    <strong>What this page is for:</strong> Dashboard shows how the business is doing right now — pick Daily, Monthly, Quarterly or Yearly above for that period's performance. For the complete, permanent sales record, see <a href="{{ url_for('sales_history') }}">Analytics</a>; for growth trends and a whole-app summary, see <a href="{{ url_for('reports') }}">Reports</a>.
+</div>
 
     <!-- ==================== PERFORMANCE OVERVIEW ==================== -->
     <div class="kpi-filter-bar">
@@ -123,8 +42,8 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
             <div class="kpi-note" id="sales-period-note">Today's revenue</div>
         </div>
 
-        <!-- Profit -->
-        {% if role in ['owner', 'admin'] %}
+        <!-- Profit — owner only -->
+        {% if role == 'owner' %}
         <div class="card kpi-card profit-card">
             <div class="kpi-card-top">
                 <div>
@@ -139,7 +58,8 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
         </div>
         {% endif %}
 
-        <!-- Expenses -->
+        <!-- Expenses — owner only -->
+        {% if role == 'owner' %}
         <div class="card kpi-card expense-card">
             <div class="kpi-card-top">
                 <div>
@@ -152,9 +72,10 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
             <small id="expenseSLL">SLL 0.00</small>
             <div class="kpi-note" id="expense-period-note">Today's expenses</div>
         </div>
+        {% endif %}
 
-        <!-- Net Profit -->
-        {% if role in ['owner', 'admin'] %}
+        <!-- Net Profit — owner only -->
+        {% if role == 'owner' %}
         <div class="card kpi-card net-profit-card">
             <div class="kpi-card-top">
                 <div>
@@ -179,7 +100,7 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
                 <div class="alert-heading-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
                 <div>
                     <span>INVENTORY ALERT</span>
-                    <h3>Low Stock</h3>
+                    <h3>Low Stock <span class="sr-only">(live inventory)</span></h3>
                 </div>
                 <span class="alert-count">{{ low_stock|length }}</span>
             </div>
@@ -203,7 +124,7 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
                 <div class="alert-heading-icon"><i class="fa-solid fa-fire"></i></div>
                 <div>
                     <span>SALES INSIGHT</span>
-                    <h3>High Demand</h3>
+                    <h3>High Demand <span class="sr-only">(live sales, last 7 days)</span></h3>
                 </div>
                 <span class="alert-count">{{ high_demand|length }}</span>
             </div>
@@ -330,6 +251,7 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
                     <option value="electronics">Electronics</option>
                     <option value="other">Other</option>
                 </select>
+                <small class="table-helper">Showing up to 500 active products here. Use Inventory search for the full catalog.</small>
             </div>
         </div>
 
@@ -337,10 +259,19 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
         <fieldset class="form-fieldset">
             <legend>Product Details</legend>
             <div class="form-grid">
-                <!-- <div class="form-field">
-                    <label for="product-name">Product Name *</label>
-                    <input id="product-name" name="name" type="text" placeholder="e.g. Air Max 90" required>
-                </div> -->
+                <div class="form-field">
+                    <label for="product-brand">Brand / Product Name *</label>
+                    <input id="product-brand" name="brand" type="text" maxlength="150" placeholder="e.g. Nike" required autocomplete="off">
+                </div>
+                <div class="form-field">
+                    <label for="product-model">Model <span id="model-required-mark">*</span></label>
+                    <input id="product-model" name="model" type="text" maxlength="150" placeholder="e.g. Air Max 90" autocomplete="off">
+                </div>
+                <div class="form-field" id="variant-value-field">
+                    <label for="product-variant-value">Size / Variant *</label>
+                    <input id="product-variant-value" name="variant_value" type="text" maxlength="50" placeholder="e.g. 40" required autocomplete="off">
+                    <small id="variant-help" style="color: var(--text-muted);">One value only. Existing products must be restocked.</small>
+                </div>
                 <div class="form-field">
                     <label for="product-quantity">Initial Quantity *</label>
                     <input id="product-quantity" name="quantity" type="number" min="0" step="1" placeholder="0" required>
@@ -364,12 +295,11 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
             </div>
         </fieldset>
 
-        <!-- Additional Attributes (dynamic fields) -->
-        <fieldset class="form-fieldset" id="attributes-fieldset">
+        <!-- Additional Attributes: category-specific fields only.
+             Brand/Product Name, Model, and Size/Variant are defined once above. -->
+        <fieldset class="form-fieldset" id="attributes-fieldset" hidden>
             <legend>Additional Attributes</legend>
-            <div id="dynamic-fields" class="form-grid">
-                <!-- Dynamic fields injected here by JavaScript -->
-            </div>
+            <div id="dynamic-fields" class="form-grid" aria-live="polite"></div>
         </fieldset>
 
         <div class="form-actions">
@@ -407,9 +337,9 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
                     </small>
                 </label>                <select name="restock_target" id="restock-target" required>
                     <option value="">— Select product to restock —</option>
-                    {% if shoes %}
+                    {% if restock_shoes %}
                     <optgroup label="👟 Shoes">
-                        {% for shoe in shoes %}
+                        {% for shoe in restock_shoes %}
                         <option value="shoe:{{ shoe.id }}"
                                 {% if request.args.get('prefill_shoe')|int == shoe.id %}selected{% endif %}>
                             {{ shoe.brand }} {{ shoe.model }}
@@ -486,7 +416,7 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
                 <p>Monitor all products and record sales by size.</p>
             </div>
             <div class="section-header-actions">
-                <span class="inventory-count">{{ all_inventory|length }} Products</span>
+                <span class="inventory-count">{{ total_inventory }} Products</span>
             </div>
         </div>
     
@@ -495,7 +425,7 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <input type="text" id="inventorySearch" placeholder="Search products..." onkeyup="searchInventory()" autocomplete="off">
             </div>
-            <span class="table-helper">Showing {{ all_inventory|length }} product(s)</span>
+            <span class="table-helper">Showing {{ all_inventory|length }} of {{ total_inventory }} product(s)</span>
         </div>
     
         <div class="table-wrapper">
@@ -512,7 +442,7 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
                 <tbody>
                     {% for item in all_inventory %}
                     {% set total_qty = item.total_quantity %}
-                    <tr class="{% if total_qty <= LOW_STOCK_THRESHOLD and total_qty > 0 %}low-stock{% endif %}">
+                    <tr class="{% if item.stock_status == 'low' %}low-stock{% endif %}">
 
                         <!-- Product -->
                         <td>
@@ -618,12 +548,15 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
 
                         <!-- Status -->
                         <td>
-                            {% if total_qty == 0 %}
+                            {% if item.stock_status == 'out' %}
                             <span class="status-badge status-out">Out</span>
-                            {% elif total_qty <= LOW_STOCK_THRESHOLD %}
+                            {% elif item.stock_status == 'low' %}
                             <span class="status-badge status-low">Low</span>
                             {% else %}
                             <span class="status-badge status-good">In stock</span>
+                            {% endif %}
+                            {% if item.high_demand_qty %}
+                            <span class="status-badge" title="{{ item.high_demand_qty }} units sold in the last 7 days">High demand · {{ item.high_demand_qty }}</span>
                             {% endif %}
                         </td>
 
@@ -648,39 +581,57 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
                         </td>
 
                         <!-- Sell -->
-                        <td>
-                            {% if total_qty > 0 %}
-                            <form method="POST"
-                                action="#"
-                                id="sell-form-{{ 'shoe' if item.category == 'shoe' else 'product' }}-{{ item.id }}"
-                                class="sell-form"
-                                data-item-id="{{ item.id }}"
-                                data-item-type="{{ 'shoe' if item.category == 'shoe' else 'product' }}"
-                                style="flex-wrap: wrap;">
+                    <td>
+                        {% if total_qty > 0 %}
+                        <form method="POST"
+                            action="#"
+                            id="sell-form-{{ 'shoe' if item.category == 'shoe' else 'product' }}-{{ item.id }}"
+                            class="sell-form"
+                            data-item-id="{{ item.id }}"
+                            data-item-type="{{ 'shoe' if item.category == 'shoe' else 'product' }}"
+                            style="flex-wrap: wrap;">
 
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="variant_id" class="hidden-variant" disabled>
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="variant_id" class="hidden-variant" disabled>
 
-                                <select name="customer_id" style="font-size: 10px; padding: 4px;">
-                                    <option value="">Walk-in</option>
-                                    {% for c in customers %}
-                                    <option value="{{ c.id }}">{{ c.name }}</option>
-                                    {% endfor %}
-                                </select>
+                            <select name="customer_id" style="font-size: 10px; padding: 4px;">
+                                <option value="">Walk-in</option>
+                                {% for c in customers %}
+                                <option value="{{ c.id }}">{{ c.name }}</option>
+                                {% endfor %}
+                            </select>
 
-                                <input type="number" name="quantity" min="1" placeholder="Qty" required
-                                    style="width: 50px; padding: 4px; font-size: 10px;">
+                            <input type="number" name="quantity" min="1" placeholder="Qty" required
+                                style="width: 50px; padding: 4px; font-size: 10px;">
 
-                                <button type="submit" class="sell-btn"
-                                        style="padding: 4px 10px; font-size: 10px;">
-                                    <i class="fa-solid fa-cart-shopping"></i> Sell
-                                </button>
-                            </form>
-                            {% else %}
-                            <span class="unavailable-text">Unavailable</span>
-                            {% endif %}
-                        </td>
+                            <button type="submit" class="sell-btn"
+                                    style="padding: 4px 10px; font-size: 10px;">
+                                <i class="fa-solid fa-cart-shopping"></i> Sell
+                            </button>
+                        </form>
+                        {% else %}
+                        <span class="unavailable-text">Unavailable</span>
+                        {% endif %}
 
+                        {# Discontinue — soft-delete: hides item from inventory and
+                            alerts but keeps every sale, receipt, and report entry.
+                            Matches role_required('owner', 'admin') on the route. #}
+                        {% if role in ['owner', 'admin'] %}
+                        <form method="POST"
+                                action="{{ url_for('toggle_shoe_active', shoe_id=item.id) if item.category == 'shoe' else url_for('toggle_product_active', product_id=item.id) }}"
+                                style="margin-top: 6px; display: block;"
+                                onsubmit="return confirm('Discontinue this item?\n\nIt will be hidden from inventory and alerts, but every sale, receipt, and report entry is kept forever.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit"
+                                    class="secondary-btn"
+                                    style="padding: 3px 8px; font-size: 9px; color: var(--danger); border-color: var(--danger-soft);"
+                                    title="Hide from inventory without deleting sales history">
+                                <i class="fa-solid fa-ban"></i> Discontinue
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                    
                     </tr>
                     {% else %}
                     <tr>
@@ -694,6 +645,23 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
                 </tbody>
             </table>
         </div>
+
+        {% if total_inventory_pages and total_inventory_pages > 1 %}
+        <div class="pagination" style="margin-top: 16px;">
+            {% if inv_page > 1 %}
+            <a href="{{ url_for('dashboard', inv_page=inv_page - 1) }}#inventory-section">« Prev</a>
+            {% endif %}
+
+            {% for p in range(1, total_inventory_pages + 1) %}
+            <a class="{{ 'active' if p == inv_page else '' }}"
+               href="{{ url_for('dashboard', inv_page=p) }}#inventory-section">{{ p }}</a>
+            {% endfor %}
+
+            {% if inv_page < total_inventory_pages %}
+            <a href="{{ url_for('dashboard', inv_page=inv_page + 1) }}#inventory-section">Next »</a>
+            {% endif %}
+        </div>
+        {% endif %}
     </section>
 
     <!-- ==================== EXPENSES ==================== -->
@@ -792,108 +760,17 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
 
     <!-- ==================== STAFF MANAGEMENT ==================== -->
     {% if role == 'owner' %}
-    <section class="dashboard-form-card staff" id="add-staff-section">
+    <section class="dashboard-form-card staff" aria-label="Staff management shortcut">
         <div class="form-card-header">
             <div>
                 <span class="section-eyebrow">ADMINISTRATION</span>
-                <h2>Add Staff Member</h2>
-                <p>Create an Admin or Staff account for your team.</p>
+                <h2>Staff Management</h2>
+                <p>All staff accounts, roles, passwords, and access are managed from the dedicated Staff page.</p>
             </div>
-            <div class="form-header-icon">
-                <i class="fa-solid fa-user-plus"></i>
-            </div>
+            <div class="form-header-icon"><i class="fa-solid fa-user-gear"></i></div>
         </div>
-
-        <form method="POST" action="{{ url_for('add_staff') }}" class="dashboard-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="form-grid">
-                <div class="form-field">
-                    <label for="staff-username">Username</label>
-                    <input id="staff-username" name="username" type="text" placeholder="Enter username" autocomplete="off" required>
-                </div>
-                <div class="form-field">
-                    <label for="staff-password">Password</label>
-                    <input id="staff-password" name="password" type="password" placeholder="Minimum 6 characters" minlength="6" required>
-                </div>
-                <div class="form-field">
-                    <label for="staff-role">Role</label>
-                    <select id="staff-role" name="role" required>
-                        <option value="">Select role</option>
-                        <option value="admin">Admin</option>
-                        <option value="staff">Staff</option>
-                    </select>
-                </div>
-            </div>
-            <div class="form-actions">
-                <button type="reset" class="secondary-btn">Clear</button>
-                <button type="submit" class="primary-btn">
-                    <i class="fa-solid fa-user-plus"></i> Create Account
-                </button>
-            </div>
-        </form>
-    </section>
-
-    <section class="dashboard-panel staff inventory" id="manage-staff">
-        <div class="section-header dashboard-section-header">
-            <div>
-                <span class="section-eyebrow">TEAM MANAGEMENT</span>
-                <h2>Manage Staff</h2>
-                <p>Control staff roles, passwords and access.</p>
-            </div>
-            <span class="inventory-count">{{ users|length }} Users</span>
-        </div>
-
-        <div class="table-wrapper">
-            <table id="staffTable">
-                <thead>
-                    <tr>
-                        <th>User</th>
-                        <th>Role</th>
-                        <th>Account Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for user in users %}
-                    <tr>
-                        <td>
-                            <div class="product-cell">
-                                <div class="user-avatar">
-                                    <i class="fa-solid fa-user"></i>
-                                </div>
-                                <div>
-                                    <strong>{{ user.username }}</strong>
-                                    <span>Team member</span>
-                                </div>
-                            </div>
-                        </td>
-                        <td>
-                            <select class="role-select" onchange="updateRole({{ user.id }}, this.value)" aria-label="Change role for {{ user.username }}">
-                                <option value="admin" {% if user.role.name == 'admin' %}selected{% endif %}>Admin</option>
-                                <option value="staff" {% if user.role.name == 'staff' %}selected{% endif %}>Staff</option>
-                            </select>
-                        </td>
-                        <td>
-                            <div class="staff-actions">
-                                <button type="button" class="secondary-btn" onclick="resetPassword({{ user.id }})">
-                                    <i class="fa-solid fa-key"></i> Reset Password
-                                </button>
-                                <button type="button" class="danger" onclick="deleteStaff({{ user.id }})">
-                                    <i class="fa-solid fa-trash"></i> Delete
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="3" class="empty-state">
-                            <i class="fa-solid fa-users"></i>
-                            <strong>No staff accounts</strong>
-                            <span>Create your first team member above.</span>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="form-actions">
+            <a class="primary-btn" href="{{ url_for('staff_list') }}"><i class="fa-solid fa-users-gear"></i> Open Staff Page</a>
         </div>
     </section>
     {% endif %}
@@ -952,10 +829,9 @@ data-usd-to-sll="{{ usd_to_sll_rate|default(23000) }}">
             </div>
         </div>
     </section>
+{% endblock %}
 
-</div>
-</div>
-
+{% block extra_scripts %}
 <script>
 
 // =========================================================
@@ -1032,105 +908,70 @@ document.addEventListener('change', function (e) {
 });
 
 // =========================================================
-// DYNAMIC FIELDS PER CATEGORY
+// CATEGORY-SPECIFIC ADDITIONAL FIELDS
+// Product identity fields (Brand / Product Name, Model,
+// Size / Variant) live ONCE in the form above.  This section
+// must never recreate those fields.
 // =========================================================
 const categoryFields = {
-    shoe: `
-        <div class="form-field">
-            <label>Product Name / Brand *</label>
-            <input name="brand" type="text" placeholder="e.g. Nike" required>
-        </div>
-        <div class="form-field">
-            <label>Model *</label>
-            <input name="model" type="text" placeholder="e.g. Air Max 90" required>
-        </div>
-        <div class="form-field">
-            <label>Size *</label>
-            <input name="variant_value" type="text" placeholder="One size only — e.g. 42" required>
-        </div>
-    `,
-    clothing: `
-        <div class="form-field">
-            <label>Product Name / Brand *</label>
-            <input name="brand" type="text" placeholder="e.g. Levi's" required>
-        </div>
-        <div class="form-field">
-            <label>Model (optional)</label>
-            <input name="model" type="text" placeholder="e.g. 501">
-        </div>
-        <div class="form-field">
-            <label>Size *</label>
-            <select name="variant_value" required>
-                <option value="">Select size</option>
-                <option>S</option><option>M</option><option>L</option>
-                <option>XL</option><option>XXL</option>
-            </select>
-        </div>
-    `,
+    shoe: ``,
+    clothing: ``,
     grocery: `
         <div class="form-field">
-            <label>Product Name / Brand *</label>
-            <input name="brand" type="text" placeholder="e.g. Nestlé" required>
-        </div>
-        <div class="form-field">
-            <label>Model (optional)</label>
-            <input name="model" type="text" placeholder="e.g. Milo">
-        </div>
-        <div class="form-field">
-            <label>Weight / Volume *</label>
-            <input name="variant_value" type="text" placeholder="e.g. 500g" required>
-        </div>
-        <div class="form-field">
-            <label>Expiry</label>
-            <input name="expiry" type="date">
+            <label for="product-expiry">Expiry</label>
+            <input id="product-expiry" name="expiry" type="date">
         </div>
     `,
     electronics: `
-        <div class="form-field">
-            <label>Product Name / Brand *</label>
-            <input name="brand" type="text" placeholder="e.g. Samsung" required>
-        </div>
-        <div class="form-field">
-            <label>Model *</label>
-            <input name="model" type="text" placeholder="e.g. Galaxy S24" required>
-        </div>
-        <div class="form-field">
-            <label>Variant (Color/Storage) *</label>
-            <input name="variant_value" type="text" placeholder="e.g. Black-256GB" required>
-        </div>
         <div class="form-field" style="grid-column:1/-1;">
-            <label>Specifications</label>
-            <textarea name="specs" rows="2"></textarea>
+            <label for="product-specs">Specifications</label>
+            <textarea id="product-specs" name="specs" rows="2" maxlength="1000"
+                      placeholder="Key specifications, condition, warranty, etc."></textarea>
         </div>
     `,
     other: `
-        <div class="form-field">
-            <label>Product Name / Brand *</label>
-            <input name="brand" type="text" placeholder="e.g. Acme" required>
-        </div>
-        <div class="form-field">
-            <label>Model (optional)</label>
-            <input name="model" type="text">
-        </div>
-        <div class="form-field">
-            <label>Variant *</label>
-            <input name="variant_value" type="text" placeholder="One value — e.g. Red" required>
-        </div>
         <div class="form-field" style="grid-column:1/-1;">
-            <label>Description</label>
-            <textarea name="description" rows="2"></textarea>
+            <label for="product-description">Description</label>
+            <textarea id="product-description" name="description" rows="2" maxlength="1000"
+                      placeholder="Optional product description"></textarea>
         </div>
     `
 };
 
 function updateFormFields() {
-    const category = document.getElementById('product-category').value;
+    const categorySelect = document.getElementById('product-category');
     const container = document.getElementById('dynamic-fields');
-    container.innerHTML = '';
-    const temp = document.createElement('div');
-    temp.innerHTML = categoryFields[category] || '';
-    while (temp.firstChild) {
-        container.appendChild(temp.firstChild);
+    const fieldset = document.getElementById('attributes-fieldset');
+    if (!categorySelect || !container || !fieldset) return;
+
+    const category = categorySelect.value;
+    container.innerHTML = categoryFields[category] || '';
+
+    // Hide the section when the selected category has no extra attributes.
+    const hasExtras = container.children.length > 0;
+    fieldset.hidden = !hasExtras;
+
+    // Keep the single shared Variant field accurate without creating another one.
+    const variant = document.getElementById('product-variant-value');
+    const variantLabel = document.querySelector('label[for="product-variant-value"]');
+    const variantHelp = document.getElementById('variant-help');
+    if (variant) {
+        const placeholders = {
+            shoe: 'e.g. 40',
+            clothing: 'e.g. L',
+            grocery: 'e.g. 500g',
+            electronics: 'e.g. Black / 256GB',
+            other: 'e.g. Standard'
+        };
+        variant.placeholder = placeholders[category] || 'e.g. Standard';
+    }
+    if (variantLabel) {
+        variantLabel.textContent = category === 'shoe' ? 'Size *' : 'Size / Variant *';
+    }
+    if (variantHelp) {
+        variantHelp.textContent = category === 'shoe'
+            ? 'Enter one shoe size only. Existing shoe models must be restocked.'
+            : 'Enter one variant only. Existing products must be restocked.';
     }
 }
 
@@ -1171,6 +1012,4 @@ function jumpToRestock() {
 
 
 </script>
-<script src="{{ url_for('static', filename='script.js') }}"></script>
-</body>
-</html>
+{% endblock %}

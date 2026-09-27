@@ -12,7 +12,7 @@ The application brings together inventory management, sales recording, sales ana
 **Backend:** Python / Flask  
 **Database:** SQLite  
 **Hosting:** Render  
-**Repository:** [github.com/MIKE-JOBIE/MikeShop](https://github.com/MIKE-JOBIE/MikeShop)
+**Repository:** [github.com/MIKE-JOBIE/MikeShop](https://github.com/MIKE-JOBIE/MikeShop-v1)
 
 ---
 
@@ -420,5 +420,6 @@ Sensitive deployment configuration such as the initial owner password is supplie
 For example:
 
 ```text
-OWNER_PASSWORD#   M i k e S h o p - v 1  
+OWNER_PASSWORD#   M i k e S h o p - v 1 
+ 
  

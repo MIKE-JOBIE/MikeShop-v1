@@ -13,7 +13,7 @@
                     </div>
                     <div class="brand-wordmark">
                         <strong>Mike</strong><span>Shop</span>
-                        <small>ADMIN</small>
+                        <small>STORE INVENTORY</small>
                     </div>
                 </a>
             </div>
@@ -25,10 +25,10 @@
                 <a href="{{ url_for('sales_history') }}" class="{% if active_page == 'sales' %}active{% endif %}">
                     <i class="fa-solid fa-chart-line"></i> Analytics
                 </a>
-                <a href="{{ url_for('customers') }}" class="v2-feature {% if active_page == 'customers' %}active{% endif %}">
+                <a href="{{ url_for('customers') }}" class="{% if active_page == 'customers' %}active{% endif %}">
                     <i class="fa-solid fa-users"></i> Customers
                 </a>
-                <a href="{{ url_for('reports') }}" class="v2-feature {% if active_page == 'reports' %}active{% endif %}">
+                <a href="{{ url_for('reports') }}" class="{% if active_page == 'reports' %}active{% endif %}">
                     <i class="fa-solid fa-file-pdf"></i> Reports
                 </a>
                                 {% if role == 'owner' %}
@@ -88,9 +88,42 @@
         <main>
             {% block content %}{% endblock %}
         </main>
+
+        <footer class="app-footer" aria-label="MikeShop footer">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <strong><i class="fa-solid fa-store"></i> MikeShop</strong>
+                    <p>Simple, accountable inventory and sales management for your real-world shop.</p>
+                </div>
+                <div>
+                    <strong>Quick Links</strong>
+                    <a href="{{ url_for('dashboard') }}#inventory-section">Inventory</a>
+                    <a href="{{ url_for('dashboard') }}#restock-section">Restock</a>
+                    <a href="{{ url_for('sales_history') }}">Analytics</a>
+                    <a href="{{ url_for('customers') }}">Customers</a>
+                    {% if role in ['owner','admin'] %}<a href="{{ url_for('reports') }}">Reports</a>{% endif %}
+                    {% if role == 'owner' %}<a href="{{ url_for('staff_list') }}">Staff Management</a>{% endif %}
+                </div>
+                <div>
+                    <strong>Contact</strong>
+                    <p><i class="fa-solid fa-location-dot"></i> Freetown, Sierra Leone</p>
+                    <p><i class="fa-solid fa-phone"></i> +232 31 950662</p>
+                    <p><i class="fa-solid fa-envelope"></i> mjobie2009@gmail.com</p>
+                </div>
+                <div>
+                    <strong>Stay Connected</strong>
+                    {% if config.SOCIAL_LINKS.facebook %}<a href="{{ config.SOCIAL_LINKS.facebook }}" target="_blank" rel="noopener noreferrer" aria-label="MikeShop on Facebook"><i class="fa-brands fa-facebook"></i> Facebook</a>{% endif %}
+                    {% if config.SOCIAL_LINKS.instagram %}<a href="{{ config.SOCIAL_LINKS.instagram }}" target="_blank" rel="noopener noreferrer" aria-label="MikeShop on Instagram"><i class="fa-brands fa-instagram"></i> Instagram</a>{% endif %}
+                    {% if config.SOCIAL_LINKS.linkedin %}<a href="{{ config.SOCIAL_LINKS.linkedin }}" target="_blank" rel="noopener noreferrer" aria-label="MikeShop on LinkedIn"><i class="fa-brands fa-linkedin"></i> LinkedIn</a>{% endif %}
+                    {% if config.SOCIAL_LINKS.whatsapp %}<a href="{{ config.SOCIAL_LINKS.whatsapp }}" target="_blank" rel="noopener noreferrer" aria-label="MikeShop on WhatsApp"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>{% endif %}
+                    {% if not (config.SOCIAL_LINKS.facebook or config.SOCIAL_LINKS.instagram or config.SOCIAL_LINKS.linkedin or config.SOCIAL_LINKS.whatsapp) %}<p>Social profiles can be added in <code>.env</code>.</p>{% endif %}
+                </div>
+            </div>
+            <div class="footer-bottom">© {{ now().year if now is defined else 2026 }} MikeShop. All rights reserved.</div>
+        </footer>
     </div>
 </div>
 
 <!-- Admin JS -->
-<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin.js', v='20260926-freeze') }}"></script>
 {% endblock %}

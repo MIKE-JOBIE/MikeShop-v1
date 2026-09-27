@@ -3318,3 +3318,41 @@ canvas {
     from { opacity: 0; transform: translateY(-3px); }
     to   { opacity: 1; transform: translateY(0); }
 }
+/* Page explainer banner — shared across pages so "what this page is for"
+   messaging looks consistent everywhere it's used. */
+.page-explainer {
+    background: var(--sky-light, #EFF6FF);
+    border: 1px solid var(--sky, #BAE6FD);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: var(--grey-dark);
+}
+
+
+/* PATCH 02 — shared navigation and footer */
+.app-footer { margin-top: 2rem; padding: 2rem clamp(1rem, 3vw, 2.5rem) 1rem; background: var(--surface, #fff); border-top: 1px solid var(--border, #e5e7eb); color: var(--text, #1f2937); }
+.footer-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.5rem; }
+.footer-grid > div { display: flex; flex-direction: column; gap: .45rem; }
+.footer-grid strong { font-weight: 800; }
+.footer-grid p { margin: 0; font-size: .82rem; color: var(--text-muted, #6b7280); line-height: 1.5; }
+.footer-grid a { color: inherit; font-size: .84rem; text-decoration: none; }
+.footer-grid a:hover, .footer-grid a:focus-visible { text-decoration: underline; }
+.footer-bottom { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border, #e5e7eb); font-size: .75rem; color: var(--text-muted, #6b7280); text-align: center; }
+.top-nav a { display: inline-flex; align-items: center; gap: .45rem; border-radius: var(--radius-sm, 8px); padding: .65rem .8rem; text-decoration: none; }
+.top-nav a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--brand, #2563eb); outline-offset: 2px; }
+@media (max-width: 850px) { .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .footer-grid { grid-template-columns: 1fr; } }
+
+/* Patch 06: consistent footer + pagination */
+.site-footer{margin-top:40px;padding:26px 20px;background:linear-gradient(135deg,#0f172a,#1e293b);color:#e2e8f0;border-top:3px solid var(--brand,#10b981)}
+.footer-inner{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:1.2fr 2fr 1fr;gap:24px;align-items:center}
+.footer-inner div{display:flex;flex-direction:column;gap:6px}.footer-inner nav{display:flex;flex-wrap:wrap;gap:14px;justify-content:center}.footer-inner a{color:#e2e8f0;text-decoration:none}.footer-inner a:hover,.footer-inner a:focus{color:#fff;text-decoration:underline}
+.pagination{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:18px 0}.pagination a{padding:7px 11px;border:1px solid var(--grey-border,#d1d5db);border-radius:8px;text-decoration:none}.pagination a.active{font-weight:800;background:var(--brand,#10b981);color:#fff}
+@media(max-width:800px){.footer-inner{grid-template-columns:1fr;text-align:center}.footer-inner nav{justify-content:center}}
+/* Patch 06 footer polish */
+.app-footer{margin-top:2.5rem;padding:2.4rem clamp(1rem,4vw,3rem) 1rem;background:linear-gradient(135deg,#0f172a,#172554);border-top:3px solid var(--brand,#10b981);color:#f8fafc;box-shadow:0 -10px 30px rgba(15,23,42,.08)}
+.footer-grid{max-width:1400px;margin:0 auto;grid-template-columns:1.35fr 1fr 1.2fr 1fr;gap:2rem}.footer-grid strong{color:#fff;font-size:.95rem}.footer-grid p{color:#cbd5e1}.footer-grid a{color:#dbeafe;transition:transform .15s ease,color .15s ease}.footer-grid a:hover,.footer-grid a:focus-visible{color:#fff;transform:translateX(2px)}.footer-brand strong{font-size:1.15rem}.footer-brand strong i{margin-right:.35rem}.footer-bottom{max-width:1400px;margin:1.8rem auto 0;border-color:rgba(255,255,255,.14);color:#94a3b8}
+
+.footer-socials a i { width: 1.1em; text-align: center; }

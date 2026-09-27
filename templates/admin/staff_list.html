@@ -8,13 +8,48 @@
         <div>
             <span class="section-eyebrow">TEAM</span>
             <h2>Staff Management</h2>
-            <p>Manage admin and staff accounts. Use "Add Staff Member" on the Dashboard to create a new account.</p>
+            <p>Manage admin and staff accounts. Use this page to create, update, deactivate, and manage team accounts.</p>
         </div>
         <div>
             <span class="inventory-count">
-                <i class="fa-solid fa-user-group"></i> {{ users|length }} Accounts
+                <i class="fa-solid fa-user-group"></i> {{ users.total }} Accounts
             </span>
         </div>
+    </div>
+
+    <div class="page-explainer">
+        <strong>What this page is for:</strong> Manage who has access to MikeShop — change roles, reset passwords, or deactivate an account without losing its sales history. Owner-only.
+    </div>
+
+    <div class="dashboard-form-card staff" style="margin: 18px 0;">
+        <div class="section-header">
+            <div>
+                <span class="section-eyebrow">OWNER ONLY</span>
+                <h3>Add Staff Member</h3>
+                <p>Create an Admin or Staff account. Owner accounts cannot be created here.</p>
+            </div>
+        </div>
+        <form method="POST" action="{{ url_for('add_staff') }}" class="form-grid" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="staff_username">Username</label>
+                <input id="staff_username" name="username" type="text" minlength="3" maxlength="80" required autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="staff_password">Temporary Password</label>
+                <input id="staff_password" name="password" type="password" minlength="12" maxlength="128" required autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label for="staff_role">Role</label>
+                <select id="staff_role" name="role" required>
+                    <option value="staff">Staff</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <div class="form-group" style="align-self:end;">
+                <button class="primary-btn" type="submit"><i class="fa-solid fa-user-plus"></i> Create Account</button>
+            </div>
+        </form>
     </div>
 
     <table>
@@ -26,7 +61,7 @@
             <th>Last Login</th>
             <th>Actions</th>
         </tr>
-        {% for u in users %}
+        {% for u in users.items %}
         <tr>
             <td>{{ u.username }}</td>
             <td>
@@ -69,11 +104,18 @@
                 <div class="empty-state">
                     <i class="fa-solid fa-user-group"></i>
                     <strong>No staff accounts yet</strong>
-                    <span>Add one from the Dashboard's "Add Staff Member" section.</span>
+                    <span>Create a team account using the Add Staff Member form above.</span>
                 </div>
             </td>
         </tr>
         {% endfor %}
     </table>
+    {% if users.pages > 1 %}
+    <div class="pagination" aria-label="Staff account pages">
+        {% for p in range(1, users.pages + 1) %}
+            <a href="{{ url_for('staff_list', page=p) }}" class="{{ 'active' if p == users.page else '' }}">{{ p }}</a>
+        {% endfor %}
+    </div>
+    {% endif %}
 </section>
 {% endblock %}

@@ -25,10 +25,12 @@ class Shoe(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     brand = db.Column(db.String(150), nullable=False)   # Product Name / Brand
     model = db.Column(db.String(150), nullable=False)   # required for shoes
+    identity_key = db.Column(db.String(320), nullable=False, unique=True, index=True)
     category = db.Column(db.String(50), default='shoe')
     image_url = db.Column(db.String(500), default='https://via.placeholder.com/200x200?text=No+Image')
     sku = db.Column(db.String(50), unique=True)
     is_active = db.Column(db.Boolean, default=True)
+    deactivated_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -58,11 +60,16 @@ class ShoeSize(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     shoe_id = db.Column(db.Integer, db.ForeignKey('shoe.id'), nullable=False)
     size = db.Column(db.String(50), nullable=False)
+    variant_key = db.Column(db.String(120), nullable=False, index=True)
     quantity = db.Column(db.Integer, default=0)
     cost_usd = db.Column(db.Float, nullable=False)
     sell_usd = db.Column(db.Float, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('shoe_id', 'size', name='uq_shoe_size_value'),
+    )
 
 class Product(db.Model):
     __tablename__ = 'product'
@@ -72,10 +79,12 @@ class Product(db.Model):
     brand = db.Column(db.String(150), nullable=False)   # Product Name / Brand
     model = db.Column(db.String(150), nullable=False, default='')  # optional -> empty string
     category = db.Column(db.String(50), nullable=False)
+    identity_key = db.Column(db.String(360), nullable=False, unique=True, index=True)
 
     image_url = db.Column(db.String(500), default='https://via.placeholder.com/200x200?text=No+Image')
     sku = db.Column(db.String(50), unique=True)
     is_active = db.Column(db.Boolean, default=True)
+    deactivated_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Additional non-identifying attributes (specs, expiry, description)
@@ -121,11 +130,16 @@ class ProductVariant(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     variant_label = db.Column(db.String(50), nullable=False)   # "size", "weight", "color"
     variant_value = db.Column(db.String(50), nullable=False)
+    variant_key = db.Column(db.String(120), nullable=False, index=True)
     quantity = db.Column(db.Integer, default=0)
     cost_usd = db.Column(db.Float, nullable=False)
     sell_usd = db.Column(db.Float, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('product_id', 'variant_label', 'variant_value', name='uq_product_variant_value'),
+    )
 
 class Sale(db.Model):
     __tablename__ = 'sale'
