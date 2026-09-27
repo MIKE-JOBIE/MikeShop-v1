@@ -52,6 +52,7 @@ def healthz():
         db.session.commit()
         return {'status': 'ok', 'db': 'ok'}, 200
     except Exception as e:
+        app.logger.error(f"healthz DB probe failed: {type(e).__name__}: {e}")
         db.session.rollback()
         return {'status': 'degraded', 'db': 'error'}, 503
 
