@@ -100,9 +100,6 @@
                     <a href="{{ url_for('dashboard') }}#inventory-section">Inventory</a>
                     <a href="{{ url_for('dashboard') }}#restock-section">Restock</a>
                     <a href="{{ url_for('sales_history') }}">Analytics</a>
-                    <a href="{{ url_for('customers') }}">Customers</a>
-                    {% if role in ['owner','admin'] %}<a href="{{ url_for('reports') }}">Reports</a>{% endif %}
-                    {% if role == 'owner' %}<a href="{{ url_for('staff_list') }}">Staff Management</a>{% endif %}
                 </div>
                 <div>
                     <strong>Contact</strong>
